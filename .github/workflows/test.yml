@@ -126,28 +126,34 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-13
-            arch: x86_64 (Intel)
-            artifact: result-macos-intel
           - os: macos-14
             arch: arm64 (Apple Silicon)
+            target_flag: ""
             artifact: result-macos-arm64
+          - os: macos-14
+            arch: x86_64 (via Rosetta on Apple Silicon)
+            target_flag: "-target x86_64-apple-macos13"
+            artifact: result-macos-x86_64
     steps:
       - uses: actions/checkout@v5
 
       - name: Show compiler & arch
         run: |
           clang++ --version
-          echo "Architecture: $(uname -m)"
+          echo "Host architecture: $(uname -m)"
+          echo "Target: ${{ matrix.arch }}"
 
       - name: Compile (with -fms-extensions)
         run: |
           clang++ -std=c++17 -Wall -Wextra -Werror \
             -fms-extensions \
+            ${{ matrix.target_flag }} \
             -o test declspec_property_test.cpp
+          file test
 
       - name: Run tests
         run: |
+          # x86_64 二进制在 arm64 mac 上通过 Rosetta 2 自动运行
           ./test | tee result.txt
 
       - name: Upload result
@@ -342,22 +348,22 @@ jobs:
             echo "| Linux | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # macOS Intel
-          if [ -f results/result-macos-intel/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-macos-intel/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-macos-intel/result.txt || echo "?")
-            echo "| macOS (Intel x86_64) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| macOS (Intel x86_64) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
-          fi
-
           # macOS ARM64
           if [ -f results/result-macos-arm64/result.txt ]; then
             passed=$(grep -oP '\d+ passed' results/result-macos-arm64/result.txt || echo "?")
             failed=$(grep -oP '\d+ failed' results/result-macos-arm64/result.txt || echo "?")
-            echo "| macOS (Apple Silicon arm64) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS (arm64 原生) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| macOS (Apple Silicon arm64) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS (arm64 原生) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # macOS x86_64 via Rosetta
+          if [ -f results/result-macos-x86_64/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-macos-x86_64/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-macos-x86_64/result.txt || echo "?")
+            echo "| macOS (x86_64 Rosetta) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| macOS (x86_64 Rosetta) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # iOS Simulator

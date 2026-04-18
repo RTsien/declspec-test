@@ -343,16 +343,16 @@ jobs:
         run: |
           echo "# 🧪 __declspec(property) 跨平台测试报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| 平台 | 编译器 | 编译 | 运行 | 结果 |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------|------|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 目标平台 | 宿主机 | 编译器 | 编译 | 运行 | 结果 |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|--------|------|------|------|" >> $GITHUB_STEP_SUMMARY
 
           # Windows MSVC
           if [ -f results/result-windows-msvc/result.txt ]; then
             passed=$(grep -oP '\d+ passed' results/result-windows-msvc/result.txt || echo "?")
             failed=$(grep -oP '\d+ failed' results/result-windows-msvc/result.txt || echo "?")
-            echo "| Windows | MSVC | ✅ | ✅ $passed, $failed | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Windows x86_64 | windows-latest | MSVC | ✅ | ✅ $passed, $failed | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Windows | MSVC | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Windows x86_64 | windows-latest | MSVC | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Linux Clang versions
@@ -360,67 +360,67 @@ jobs:
             if [ -f "results/result-linux-clang-${ver}/result.txt" ]; then
               passed=$(grep -oP '\d+ passed' "results/result-linux-clang-${ver}/result.txt" || echo "?")
               failed=$(grep -oP '\d+ failed' "results/result-linux-clang-${ver}/result.txt" || echo "?")
-              echo "| Linux | Clang ${ver} | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+              echo "| Linux x86_64 | ubuntu-latest | Clang ${ver} | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
             else
-              echo "| Linux | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+              echo "| Linux x86_64 | ubuntu-latest | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
             fi
           done
 
           # Linux GCC
           if [ -f results/result-linux-gcc/result.txt ]; then
             gcc_result=$(cat results/result-linux-gcc/result.txt)
-            echo "| Linux | GCC | ❌ 预期失败 | — | ✅ 符合预期 |" >> $GITHUB_STEP_SUMMARY
+            echo "| Linux x86_64 | ubuntu-latest | GCC | ❌ 预期失败 | — | ✅ 符合预期 |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Linux | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Linux x86_64 | ubuntu-latest | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # macOS ARM64
           if [ -f results/result-macos-arm64/result.txt ]; then
             passed=$(grep -oP '\d+ passed' results/result-macos-arm64/result.txt || echo "?")
             failed=$(grep -oP '\d+ failed' results/result-macos-arm64/result.txt || echo "?")
-            echo "| macOS (arm64 原生) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS arm64 | macos-14 (Apple Silicon) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| macOS (arm64 原生) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS arm64 | macos-14 (Apple Silicon) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # macOS x86_64 via Rosetta
           if [ -f results/result-macos-x86_64/result.txt ]; then
             passed=$(grep -oP '\d+ passed' results/result-macos-x86_64/result.txt || echo "?")
             failed=$(grep -oP '\d+ failed' results/result-macos-x86_64/result.txt || echo "?")
-            echo "| macOS (x86_64 Rosetta) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS x86_64 | macos-14 + Rosetta 2 | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| macOS (x86_64 Rosetta) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS x86_64 | macos-14 + Rosetta 2 | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # iOS Simulator
           if [ -f results/result-ios-simulator/result.txt ]; then
             passed=$(grep -oP '\d+ passed' results/result-ios-simulator/result.txt || echo "?")
             failed=$(grep -oP '\d+ failed' results/result-ios-simulator/result.txt || echo "?")
-            echo "| iOS (Simulator arm64) | Xcode Clang | ✅ | ✅ ${passed}, ${failed} | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| iOS arm64 | macos-14 + Simulator | Xcode Clang | ✅ | ✅ ${passed}, ${failed} | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| iOS (Simulator arm64) | Xcode Clang | — | — | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| iOS arm64 | macos-14 + Simulator | Xcode Clang | — | — | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android x86_64 模拟器
           if [ -f results/result-android-x86_64-emu/result.txt ]; then
             passed=$(grep -oP '\d+ passed' results/result-android-x86_64-emu/result.txt || echo "?")
             failed=$(grep -oP '\d+ failed' results/result-android-x86_64-emu/result.txt || echo "?")
-            echo "| Android (x86_64 模拟器) | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android (x86_64 模拟器) | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android ARM64 模拟器
           if [ -f results/result-android-arm64-emu/result.txt ]; then
             passed=$(grep -oP '\d+ passed' results/result-android-arm64-emu/result.txt || echo "?")
             failed=$(grep -oP '\d+ failed' results/result-android-arm64-emu/result.txt || echo "?")
-            echo "| Android (ARM64 模拟器) | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | macos-14 + ARM 模拟器 | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android (ARM64 模拟器) | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | macos-14 + ARM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android ARM32 (仅编译)
-          echo "| Android (ARM32) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM32 | ubuntu (交叉编译) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

@@ -182,8 +182,10 @@ jobs:
 
       - name: Boot iOS Simulator
         run: |
-          # 查找可用的 iPhone Simulator
-          DEVICE=$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed 's/.*(\(.*\)) .*/\1/')
+          # 列出可用设备（调试用）
+          xcrun simctl list devices available | grep "iPhone" | head -5
+          # 提取 UUID（第一个括号内的内容，格式: iPhone 16 (UUID) (Shutdown)）
+          DEVICE=$(xcrun simctl list devices available | grep "iPhone" | head -1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
           echo "Using device: $DEVICE"
           echo "DEVICE_ID=$DEVICE" >> $GITHUB_ENV
           xcrun simctl boot "$DEVICE" || true

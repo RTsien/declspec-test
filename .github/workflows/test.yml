@@ -422,19 +422,44 @@ jobs:
             echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Android ARM64 QEMU
+          # Android ARM64 + ARM32 QEMU
           if [ -f results/result-android-arm-qemu/result.txt ]; then
-            arm64_passed=$(grep -oP '\d+ passed' results/result-android-arm-qemu/result.txt | head -1 || echo "?")
-            arm64_failed=$(grep -oP '\d+ failed' results/result-android-arm-qemu/result.txt | head -1 || echo "?")
-            echo "| Android ARM64 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm64_passed}, ${arm64_failed} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-            # ARM32
-            arm32_passed=$(grep -oP '\d+ passed' results/result-android-arm-qemu/result.txt | tail -1 || echo "?")
-            arm32_failed=$(grep -oP '\d+ failed' results/result-android-arm-qemu/result.txt | tail -1 || echo "?")
-            echo "| Android ARM32 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm32_passed}, ${arm32_failed} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            # 文件格式:
+            #   === ARM64 (via qemu-aarch64-static) ===
+            #   ... 25 passed, 0 failed ...
+            #   === ARM32 (via qemu-arm-static) ===
+            #   ... 25 passed, 0 failed ...
+            # 按 ARM64/ARM32 分段提取
+            arm64_section=$(sed -n '/ARM64/,/ARM32/p' results/result-android-arm-qemu/result.txt)
+            arm32_section=$(sed -n '/ARM32/,$p' results/result-android-arm-qemu/result.txt)
+
+            arm64_passed=$(echo "$arm64_section" | grep -oP '\d+ passed' | head -1)
+            arm64_failed=$(echo "$arm64_section" | grep -oP '\d+ failed' | head -1)
+            arm32_passed=$(echo "$arm32_section" | grep -oP '\d+ passed' | head -1)
+            arm32_failed=$(echo "$arm32_section" | grep -oP '\d+ failed' | head -1)
+
+            echo "| Android ARM64 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm64_passed:-?}, ${arm64_failed:-?} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM32 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm32_passed:-?}, ${arm32_failed:-?} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Android ARM64 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
             echo "| Android ARM32 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## 📝 特殊验证方式说明" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 目标平台 | 验证方式 | 说明 |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|---------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS x86_64 | 交叉编译 + Rosetta 2 | GitHub 已淘汰 Intel (macos-13) runner；在 macos-14 (arm64) 上用 \`-target x86_64-apple-macos13\` 交叉编译，通过 Rosetta 2 指令翻译运行，与原生 Intel 行为等价 |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS arm64 | Xcode + iPhone Simulator | 在 macos-14 上通过 \`xcrun simctl spawn\` 在 iPhone Simulator 中运行，等同真机 CPU 执行（非指令翻译） |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android x86_64 | KVM 硬件加速模拟器 | 在 ubuntu runner 上通过 Android Emulator (API 30) + KVM 硬件虚拟化运行，接近原生性能 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM64 | QEMU user-mode | 在 ubuntu x86_64 上通过 \`qemu-aarch64-static\` 进行 CPU 指令级翻译执行静态链接的 ARM64 ELF 二进制，验证运行时行为正确性 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM32 | QEMU user-mode | 在 ubuntu x86_64 上通过 \`qemu-arm-static\` 进行 CPU 指令级翻译执行静态链接的 ARM32 ELF 二进制，验证运行时行为正确性 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **为什么 QEMU user-mode 可以验证正确性？** \`__declspec(property)\` 是纯编译期语法糖，编译器将属性访问重写为函数调用，生成的机器码与手写 Getter/Setter 等价。QEMU user-mode 提供精确的 CPU 指令翻译，足以验证编译器生成代码的逻辑正确性。" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

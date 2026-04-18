@@ -11,17 +11,6 @@
  *     UE 的 Clang 构建默认已开启此选项
  */
 
-// Workaround: Android Bionic requires minimum TLS alignment of 64 (ARM64) / 32 (ARM32).
-// NDK static linking generates TLS segment with default alignment (8), which causes
-// "TLS segment is underaligned" abort in Bionic's linker. A dummy aligned thread_local
-// variable forces the linker to emit the correct TLS segment alignment.
-#if defined(__ANDROID__) || defined(__BIONIC__)
-  #if defined(__aarch64__)
-    static __thread char __bionic_tls_align_fix __attribute__((aligned(64), used));
-  #elif defined(__arm__)
-    static __thread char __bionic_tls_align_fix __attribute__((aligned(32), used));
-  #endif
-#endif
 
 #include <cstdio>
 #include <cstdint>

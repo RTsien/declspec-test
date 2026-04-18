@@ -236,14 +236,14 @@ jobs:
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
             -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
-            -o test_arm64 declspec_property_test.cpp
+            -o test_arm64 declspec_property_test.cpp bionic_tls_align.S
           file test_arm64
 
       - name: Cross-compile ARM32
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ \
             -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
-            -o test_arm32 declspec_property_test.cpp
+            -o test_arm32 declspec_property_test.cpp bionic_tls_align.S
           file test_arm32
 
       - name: Cross-compile x86_64

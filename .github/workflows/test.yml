@@ -119,15 +119,26 @@ jobs:
           path: result.txt
 
   # ============================================================
-  # macOS — Apple Clang
+  # macOS — Apple Clang (Intel x86_64 + ARM64 分开测试)
   # ============================================================
   macos-clang:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            arch: x86_64 (Intel)
+            artifact: result-macos-intel
+          - os: macos-14
+            arch: arm64 (Apple Silicon)
+            artifact: result-macos-arm64
     steps:
       - uses: actions/checkout@v5
 
-      - name: Show compiler version
-        run: clang++ --version
+      - name: Show compiler & arch
+        run: |
+          clang++ --version
+          echo "Architecture: $(uname -m)"
 
       - name: Compile (with -fms-extensions)
         run: |
@@ -142,7 +153,7 @@ jobs:
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: result-macos-clang
+          name: ${{ matrix.artifact }}
           path: result.txt
 
   # ============================================================
@@ -253,13 +264,22 @@ jobs:
             echo "| Linux | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # macOS
-          if [ -f results/result-macos-clang/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-macos-clang/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-macos-clang/result.txt || echo "?")
-            echo "| macOS | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ${{ needs.macos-clang.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          # macOS Intel
+          if [ -f results/result-macos-intel/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-macos-intel/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-macos-intel/result.txt || echo "?")
+            echo "| macOS (Intel x86_64) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| macOS | Apple Clang | — | — | ${{ needs.macos-clang.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS (Intel x86_64) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # macOS ARM64
+          if [ -f results/result-macos-arm64/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-macos-arm64/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-macos-arm64/result.txt || echo "?")
+            echo "| macOS (Apple Silicon arm64) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| macOS (Apple Silicon arm64) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android NDK

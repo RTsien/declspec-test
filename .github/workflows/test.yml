@@ -215,9 +215,9 @@ jobs:
           path: result.txt
 
   # ============================================================
-  # Android NDK — 交叉编译 + 模拟器运行
+  # Android NDK — 交叉编译 (ubuntu) + 模拟器运行 (x86_64 + ARM64)
   # ============================================================
-  android-ndk:
+  android-ndk-compile:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -235,23 +235,42 @@ jobs:
       - name: Cross-compile ARM64
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
-            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
             -o test_arm64 declspec_property_test.cpp
           file test_arm64
 
       - name: Cross-compile ARM32
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ \
-            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
             -o test_arm32 declspec_property_test.cpp
           file test_arm32
 
-      - name: Cross-compile x86_64 (static, for emulator)
+      - name: Cross-compile x86_64
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang++ \
             -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
             -o test_x86_64 declspec_property_test.cpp
           file test_x86_64
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-binaries
+          path: |
+            test_arm64
+            test_arm32
+            test_x86_64
+
+  # --- Android x86_64 模拟器运行 (Linux KVM 加速) ---
+  android-run-x86_64:
+    runs-on: ubuntu-latest
+    needs: android-ndk-compile
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: android-binaries
 
       - name: Enable KVM
         run: |
@@ -259,7 +278,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run tests on Android Emulator (x86_64)
+      - name: Run on Android Emulator (x86_64, API 30)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -268,34 +287,41 @@ jobs:
           script: |
             adb push test_x86_64 /data/local/tmp/test
             adb shell chmod +x /data/local/tmp/test
-            adb shell /data/local/tmp/test | tee result_emu.txt
-
-      - name: Generate result
-        if: always()
-        run: |
-          echo "=== Android NDK 测试结果 ===" > result.txt
-          echo "NDK: r27c" >> result.txt
-          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --version 2>&1 | head -1 >> result.txt
-          echo "" >> result.txt
-          echo "--- 交叉编译 ---" >> result.txt
-          echo "ARM64:  $(file test_arm64)" >> result.txt
-          echo "ARM32:  $(file test_arm32)" >> result.txt
-          echo "x86_64: $(file test_x86_64)" >> result.txt
-          echo "" >> result.txt
-          echo "--- 模拟器运行 (x86_64, API 30) ---" >> result.txt
-          if [ -f result_emu.txt ]; then
-            cat result_emu.txt >> result.txt
-          else
-            echo "(模拟器未能启动或运行失败)" >> result.txt
-          fi
-          echo "" >> result.txt
-          cat result.txt
+            adb shell /data/local/tmp/test | tee result.txt
 
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-android-ndk
+          name: result-android-x86_64-emu
+          path: result.txt
+
+  # --- Android ARM64 模拟器运行 (macOS arm64 原生加速) ---
+  android-run-arm64:
+    runs-on: macos-14
+    needs: android-ndk-compile
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: android-binaries
+
+      - name: Run on Android Emulator (ARM64, API 34)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: arm64-v8a
+          emulator-options: -no-window -no-audio -no-boot-anim
+          script: |
+            adb push test_arm64 /data/local/tmp/test
+            adb shell chmod +x /data/local/tmp/test
+            adb shell /data/local/tmp/test | tee result.txt
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-android-arm64-emu
           path: result.txt
 
   # ============================================================
@@ -303,7 +329,7 @@ jobs:
   # ============================================================
   summary:
     runs-on: ubuntu-latest
-    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk]
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-run-x86_64, android-run-arm64]
     if: always()
     steps:
       - uses: actions/checkout@v5
@@ -375,16 +401,26 @@ jobs:
             echo "| iOS (Simulator arm64) | Xcode Clang | — | — | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Android NDK
-          if [ -f results/result-android-ndk/result.txt ]; then
-            emu_passed=$(grep -oP '\d+ passed' results/result-android-ndk/result.txt || echo "?")
-            emu_failed=$(grep -oP '\d+ failed' results/result-android-ndk/result.txt || echo "?")
-            echo "| Android | NDK Clang (ARM64) | ✅ | — (无 ARM runner) | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-            echo "| Android | NDK Clang (ARM32) | ✅ | — (无 ARM runner) | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-            echo "| Android | NDK Clang (x86_64) | ✅ | ✅ 模拟器 ${emu_passed}, ${emu_failed} | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          # Android x86_64 模拟器
+          if [ -f results/result-android-x86_64-emu/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-android-x86_64-emu/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-android-x86_64-emu/result.txt || echo "?")
+            echo "| Android (x86_64 模拟器) | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android | NDK Clang | — | — | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android (x86_64 模拟器) | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
+
+          # Android ARM64 模拟器
+          if [ -f results/result-android-arm64-emu/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-android-arm64-emu/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-android-arm64-emu/result.txt || echo "?")
+            echo "| Android (ARM64 模拟器) | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Android (ARM64 模拟器) | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Android ARM32 (仅编译)
+          echo "| Android (ARM32) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

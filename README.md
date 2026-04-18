@@ -1,5 +1,9 @@
 # `__declspec(property)` 跨平台编译兼容性测试套件
 
+[![CI](https://github.com/RTsien/declspec-test/actions/workflows/test.yml/badge.svg)](https://github.com/RTsien/declspec-test/actions/workflows/test.yml)
+
+> 📊 **最新测试报告**：[查看 GitHub Actions Summary](https://github.com/RTsien/declspec-test/actions/runs/24601908065)
+
 本仓库包含一套完整的测试用例，用于验证 `__declspec(property)` 在 **Windows (MSVC)**、**macOS (Apple Clang)**、**Linux (Clang)**、**Android (NDK Clang)** 下的编译和运行行为。
 
 ## 背景

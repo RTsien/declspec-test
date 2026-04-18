@@ -78,22 +78,64 @@ cl /EHsc /std:c++17 /W4 /Fe:test.exe declspec_property_test.cpp && test.exe
 
 ### 本地编译（Android NDK 交叉编译）
 ```bash
-$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang++ \
-  -std=c++17 -fms-extensions -o test_arm64 declspec_property_test.cpp
+# ARM64 静态链接（需要 bionic_tls_align.S 修复 TLS 对齐）
+$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
+  -std=c++17 -fms-extensions -static \
+  -o test_arm64 declspec_property_test.cpp bionic_tls_align.S
 # 推送到设备运行: adb push test_arm64 /data/local/tmp/ && adb shell /data/local/tmp/test_arm64
+
+# 动态链接（无需 TLS 修复）
+$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
+  -std=c++17 -fms-extensions \
+  -o test_arm64 declspec_property_test.cpp
 ```
 
 ### CI 自动化（GitHub Actions）
 推送到本仓库后，GitHub Actions 自动在以下环境并行编译和运行：
-- ✅ Windows（MSVC 最新版）
-- ✅ Ubuntu（Clang 14 / 16 / 18）
-- ✅ Ubuntu GCC（反向验证——预期编译失败）
-- ✅ macOS arm64 原生（Apple Clang）
-- ✅ macOS x86_64 交叉编译 + Rosetta 2 运行（Apple Clang）
-- ✅ iOS Simulator arm64（Xcode Clang + xcrun simctl）
-- ✅ Android NDK r27c（ARM64 / ARM32 / x86_64 交叉编译 + x86_64 模拟器运行）
 
-> **关于 macOS x86_64 测试**：GitHub Actions 的 `macos-13` (Intel) runner 已进入淘汰期，排队极慢甚至无法分配。因此我们在 `macos-14` (Apple Silicon arm64) runner 上使用 `-target x86_64-apple-macos13` 交叉编译 x86_64 二进制，再通过 Rosetta 2 翻译运行。这与原生 Intel 硬件上的行为完全等价——编译器生成的机器码相同，Rosetta 2 是指令级翻译，不影响测试逻辑。
+| 目标平台 | 宿主机 | 编译器 | 验证方式 |
+|----------|--------|--------|---------|
+| Windows x86_64 | windows-latest | MSVC | 原生编译+运行 |
+| Linux x86_64 | ubuntu-latest | Clang 14 / 16 / 18 | 原生编译+运行 |
+| Linux x86_64 | ubuntu-latest | GCC | 反向验证（预期编译失败） |
+| macOS arm64 | macos-14 | Apple Clang | 原生编译+运行 |
+| macOS x86_64 | macos-14 | Apple Clang | 交叉编译 + Rosetta 2 运行 |
+| iOS arm64 | macos-14 | Xcode Clang | 编译 + iPhone Simulator 运行 |
+| Android x86_64 | ubuntu-latest | NDK Clang 18 | 交叉编译 + KVM 模拟器运行 |
+| Android ARM64 | ubuntu-latest | NDK Clang 18 | 交叉编译 + Docker arm64 容器运行 |
+| Android ARM32 | ubuntu-latest | NDK Clang 18 | 交叉编译验证（仅编译） |
+
+#### 特殊验证方式说明
+
+**macOS x86_64 — Rosetta 2**
+GitHub Actions 的 `macos-13` (Intel) runner 已进入淘汰期，排队极慢甚至无法分配。因此在 `macos-14` (Apple Silicon) 上使用 `-target x86_64-apple-macos13` 交叉编译，再通过 Rosetta 2 指令级翻译运行，与原生 Intel 行为完全等价。
+
+**iOS arm64 — iPhone Simulator**
+使用 `xcrun --sdk iphonesimulator clang++` 编译，通过 `xcrun simctl spawn` 在 iPhone Simulator 中运行。Simulator 在 Apple Silicon 上原生执行 ARM64 代码（非指令翻译），等同真机 CPU 行为。
+
+**Android x86_64 — KVM 模拟器**
+在 ubuntu runner 上通过 Android Emulator (API 30) + KVM 硬件虚拟化运行，接近原生性能。
+
+**Android ARM64 — Docker multiarch + QEMU binfmt**
+NDK 交叉编译的静态 Bionic 二进制无法直接通过 `qemu-user-static` 运行（Bionic 要求 ARM64 TLS segment 对齐 ≥ 64 字节）。解决方案：
+1. 链接时加入 `bionic_tls_align.S`，通过汇编 `.p2align 6` 强制 `.tdata` section 对齐到 64 字节（C 级 `__attribute__((aligned(64)))` 不会传播到 PT_TLS segment alignment）
+2. 使用 `docker/setup-qemu-action` 注册 binfmt handler，在 `arm64v8/ubuntu` 容器中运行 NDK 编译的原始二进制
+
+**Android ARM32 — 仅编译**
+NDK 交叉编译通过零错误零警告。ARM32 与 ARM64 共享相同的 Clang `-fms-extensions` 编译器前端，`__declspec(property)` 语义一致。
+
+### Bionic TLS 对齐修复
+
+Android NDK 静态链接会包含 Bionic `libc.a` 的 TLS 数据，但链接器默认只生成 8 字节对齐的 PT_TLS segment。Bionic 的 `__libc_init` 启动时检查此对齐值，ARM64 要求 ≥ 64、ARM32 要求 ≥ 32，不满足直接 abort。
+
+本仓库提供 `bionic_tls_align.S` 作为通用修复：
+
+```bash
+# 链接时加入此文件即可
+aarch64-linux-android26-clang++ -static -o test test.cpp bionic_tls_align.S
+```
+
+注意：Clang 的 `__thread __attribute__((aligned(64)))` **不会**影响 PT_TLS segment 的 `p_align` 字段——TLS segment 对齐仅由 `.tdata` section 的 section alignment 决定，只能通过汇编 `.p2align` 指令控制。
 
 ## 许可证
 

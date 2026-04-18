@@ -424,19 +424,14 @@ jobs:
 
           # Android ARM64 + ARM32 QEMU
           if [ -f results/result-android-arm-qemu/result.txt ]; then
-            # 文件格式:
-            #   === ARM64 (via qemu-aarch64-static) ===
-            #   ... 25 passed, 0 failed ...
-            #   === ARM32 (via qemu-arm-static) ===
-            #   ... 25 passed, 0 failed ...
-            # 按 ARM64/ARM32 分段提取
-            arm64_section=$(sed -n '/ARM64/,/ARM32/p' results/result-android-arm-qemu/result.txt)
-            arm32_section=$(sed -n '/ARM32/,$p' results/result-android-arm-qemu/result.txt)
+            # 提取两个 "Results:" 行（ARM64 是第一个，ARM32 是第二个）
+            arm64_line=$(grep "Results:" results/result-android-arm-qemu/result.txt | head -1)
+            arm32_line=$(grep "Results:" results/result-android-arm-qemu/result.txt | tail -1)
 
-            arm64_passed=$(echo "$arm64_section" | grep -oP '\d+ passed' | head -1)
-            arm64_failed=$(echo "$arm64_section" | grep -oP '\d+ failed' | head -1)
-            arm32_passed=$(echo "$arm32_section" | grep -oP '\d+ passed' | head -1)
-            arm32_failed=$(echo "$arm32_section" | grep -oP '\d+ failed' | head -1)
+            arm64_passed=$(echo "$arm64_line" | grep -o '[0-9]* passed')
+            arm64_failed=$(echo "$arm64_line" | grep -o '[0-9]* failed')
+            arm32_passed=$(echo "$arm32_line" | grep -o '[0-9]* passed')
+            arm32_failed=$(echo "$arm32_line" | grep -o '[0-9]* failed')
 
             echo "| Android ARM64 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm64_passed:-?}, ${arm64_failed:-?} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
             echo "| Android ARM32 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm32_passed:-?}, ${arm32_failed:-?} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY

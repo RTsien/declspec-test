@@ -296,8 +296,8 @@ jobs:
           name: result-android-x86_64-emu
           path: result.txt
 
-  # --- Android ARM64 模拟器运行 (macOS arm64 原生加速) ---
-  android-run-arm64:
+  # --- Android ARM 模拟器运行 (macOS arm64 原生加速, ARM64 + ARM32) ---
+  android-run-arm:
     runs-on: macos-14
     needs: android-ndk-compile
     steps:
@@ -306,22 +306,28 @@ jobs:
         with:
           name: android-binaries
 
-      - name: Run on Android Emulator (ARM64, API 34)
+      - name: Run on Android Emulator (ARM64 + ARM32 on arm64-v8a, API 34)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: arm64-v8a
           emulator-options: -no-window -no-audio -no-boot-anim
           script: |
-            adb push test_arm64 /data/local/tmp/test
-            adb shell chmod +x /data/local/tmp/test
-            adb shell /data/local/tmp/test | tee result.txt
+            echo "=== ARM64 二进制 ===" | tee result.txt
+            adb push test_arm64 /data/local/tmp/test_arm64
+            adb shell chmod +x /data/local/tmp/test_arm64
+            adb shell /data/local/tmp/test_arm64 | tee -a result.txt
+            echo "" >> result.txt
+            echo "=== ARM32 二进制 (在 ARM64 模拟器上兼容运行) ===" | tee -a result.txt
+            adb push test_arm32 /data/local/tmp/test_arm32
+            adb shell chmod +x /data/local/tmp/test_arm32
+            adb shell /data/local/tmp/test_arm32 | tee -a result.txt
 
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-android-arm64-emu
+          name: result-android-arm-emu
           path: result.txt
 
   # ============================================================
@@ -329,7 +335,7 @@ jobs:
   # ============================================================
   summary:
     runs-on: ubuntu-latest
-    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-run-x86_64, android-run-arm64]
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-run-x86_64, android-run-arm]
     if: always()
     steps:
       - uses: actions/checkout@v5
@@ -410,17 +416,20 @@ jobs:
             echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Android ARM64 模拟器
-          if [ -f results/result-android-arm64-emu/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-android-arm64-emu/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-android-arm64-emu/result.txt || echo "?")
-            echo "| Android ARM64 | macos-14 + ARM 模拟器 | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          # Android ARM64 + ARM32 模拟器
+          if [ -f results/result-android-arm-emu/result.txt ]; then
+            # ARM64 结果
+            arm64_passed=$(grep -oP '\d+ passed' results/result-android-arm-emu/result.txt | head -1 || echo "?")
+            arm64_failed=$(grep -oP '\d+ failed' results/result-android-arm-emu/result.txt | head -1 || echo "?")
+            echo "| Android ARM64 | macos-14 + ARM 模拟器 | NDK Clang 18 | ✅ | ✅ ${arm64_passed}, ${arm64_failed} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            # ARM32 结果（第二组 passed/failed）
+            arm32_passed=$(grep -oP '\d+ passed' results/result-android-arm-emu/result.txt | tail -1 || echo "?")
+            arm32_failed=$(grep -oP '\d+ failed' results/result-android-arm-emu/result.txt | tail -1 || echo "?")
+            echo "| Android ARM32 | macos-14 + ARM 模拟器 (兼容) | NDK Clang 18 | ✅ | ✅ ${arm32_passed}, ${arm32_failed} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android ARM64 | macos-14 + ARM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | macos-14 + ARM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM32 | macos-14 + ARM 模拟器 (兼容) | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
-
-          # Android ARM32 (仅编译)
-          echo "| Android ARM32 | ubuntu (交叉编译) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

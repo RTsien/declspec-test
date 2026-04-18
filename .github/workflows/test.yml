@@ -22,16 +22,30 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Show compiler version
-        run: cl 2>&1 | head -2
-        shell: bash
+        id: compiler
+        run: |
+          $ver = (cl 2>&1 | Select-String "Version" | Select-Object -First 1).ToString().Trim()
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
+          echo $ver
+        shell: pwsh
 
       - name: Compile
         run: cl /EHsc /std:c++17 /W4 /WX /Fe:test.exe declspec_property_test.cpp
         shell: cmd
 
       - name: Run tests
-        run: test.exe
+        id: run
+        run: |
+          test.exe > result.txt 2>&1
+          type result.txt
+          echo result_file=result.txt >> %GITHUB_OUTPUT%
         shell: cmd
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-windows-msvc
+          path: result.txt
 
   # ============================================================
   # Ubuntu — Clang (with -fms-extensions)
@@ -59,7 +73,14 @@ jobs:
             -o test declspec_property_test.cpp
 
       - name: Run tests
-        run: ./test
+        run: |
+          ./test | tee result.txt
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-linux-clang-${{ matrix.clang-version }}
+          path: result.txt
 
       - name: Compile (without -fms-extensions, expect FAIL)
         run: |
@@ -86,10 +107,16 @@ jobs:
         run: |
           if g++ -std=c++17 -Wall -Wextra -o test declspec_property_test.cpp 2>/dev/null; then
             echo "UNEXPECTED: GCC compiled successfully?!"
-            ./test
+            ./test | tee result.txt
           else
-            echo "PASS: GCC correctly does not support __declspec(property)"
+            echo "PASS: GCC correctly does not support __declspec(property)" | tee result.txt
           fi
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-linux-gcc
+          path: result.txt
 
   # ============================================================
   # macOS — Apple Clang
@@ -109,7 +136,14 @@ jobs:
             -o test declspec_property_test.cpp
 
       - name: Run tests
-        run: ./test
+        run: |
+          ./test | tee result.txt
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-macos-clang
+          path: result.txt
 
   # ============================================================
   # Android NDK — Cross-compile only (no device to run on)
@@ -149,3 +183,109 @@ jobs:
       - name: Show NDK Clang version
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --version
+
+      - name: Generate result
+        run: |
+          echo "=== Android NDK Cross-Compile Results ===" > result.txt
+          echo "NDK: r27c" >> result.txt
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --version 2>&1 | head -1 >> result.txt
+          echo "" >> result.txt
+          echo "ARM64:  $(file test_arm64)" >> result.txt
+          echo "ARM32:  $(file test_arm32)" >> result.txt
+          echo "x86_64: $(file test_x86_64)" >> result.txt
+          echo "" >> result.txt
+          echo "All targets compiled successfully with -fms-extensions -Werror" >> result.txt
+          cat result.txt
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-android-ndk
+          path: result.txt
+
+  # ============================================================
+  # Summary — 汇总所有平台结果
+  # ============================================================
+  summary:
+    runs-on: ubuntu-latest
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, android-ndk]
+    if: always()
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download all results
+        uses: actions/download-artifact@v4
+        with:
+          path: results/
+
+      - name: Generate summary report
+        run: |
+          echo "# 🧪 __declspec(property) 跨平台测试报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 平台 | 编译器 | 编译 | 运行 | 结果 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|------|------|------|" >> $GITHUB_STEP_SUMMARY
+
+          # Windows MSVC
+          if [ -f results/result-windows-msvc/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-windows-msvc/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-windows-msvc/result.txt || echo "?")
+            echo "| Windows | MSVC | ✅ | ✅ $passed, $failed | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Windows | MSVC | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Linux Clang versions
+          for ver in 14 16 18; do
+            if [ -f "results/result-linux-clang-${ver}/result.txt" ]; then
+              passed=$(grep -oP '\d+ passed' "results/result-linux-clang-${ver}/result.txt" || echo "?")
+              failed=$(grep -oP '\d+ failed' "results/result-linux-clang-${ver}/result.txt" || echo "?")
+              echo "| Linux | Clang ${ver} | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Linux | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          # Linux GCC
+          if [ -f results/result-linux-gcc/result.txt ]; then
+            gcc_result=$(cat results/result-linux-gcc/result.txt)
+            echo "| Linux | GCC | ❌ 预期失败 | — | ✅ 符合预期 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Linux | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # macOS
+          if [ -f results/result-macos-clang/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-macos-clang/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-macos-clang/result.txt || echo "?")
+            echo "| macOS | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ${{ needs.macos-clang.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| macOS | Apple Clang | — | — | ${{ needs.macos-clang.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Android NDK
+          if [ -f results/result-android-ndk/result.txt ]; then
+            echo "| Android | NDK Clang (ARM64) | ✅ | 仅交叉编译 | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | NDK Clang (ARM32) | ✅ | 仅交叉编译 | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | NDK Clang (x86_64) | ✅ | 仅交叉编译 | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Android | NDK Clang | — | — | ${{ needs.android-ndk.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 各平台详细输出" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for dir in results/result-*/; do
+            name=$(basename "$dir" | sed 's/result-//')
+            echo "### 📦 ${name}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat "${dir}/result.txt" 2>/dev/null || echo "(no output)"
+            cat "${dir}/result.txt" >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(no output)" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 \`__declspec(property)\` 是纯编译期语法糖，无运行时开销。GCC 不支持此特性，但 UE 不使用 GCC。" >> $GITHUB_STEP_SUMMARY

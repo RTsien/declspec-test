@@ -157,6 +157,56 @@ jobs:
           path: result.txt
 
   # ============================================================
+  # iOS — Xcode Clang + iPhone Simulator 运行
+  # ============================================================
+  ios-simulator:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show Xcode & SDK info
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-path
+          xcrun --sdk iphonesimulator clang++ --version
+
+      - name: Compile for iOS Simulator (arm64)
+        run: |
+          xcrun --sdk iphonesimulator clang++ \
+            -std=c++17 -Wall -Wextra -Werror \
+            -fms-extensions \
+            -target arm64-apple-ios17.0-simulator \
+            -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) \
+            -o test_ios declspec_property_test.cpp
+          file test_ios
+
+      - name: Boot iOS Simulator
+        run: |
+          # 查找可用的 iPhone Simulator
+          DEVICE=$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed 's/.*(\(.*\)) .*/\1/')
+          echo "Using device: $DEVICE"
+          echo "DEVICE_ID=$DEVICE" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE" || true
+          # 等待启动完成
+          xcrun simctl bootstatus "$DEVICE" -b
+
+      - name: Run tests on iOS Simulator
+        run: |
+          xcrun simctl spawn "$DEVICE_ID" ./test_ios | tee result.txt
+
+      - name: Shutdown Simulator
+        if: always()
+        run: |
+          xcrun simctl shutdown "$DEVICE_ID" || true
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-ios-simulator
+          path: result.txt
+
+  # ============================================================
   # Android NDK — 交叉编译 + 模拟器运行
   # ============================================================
   android-ndk:
@@ -245,7 +295,7 @@ jobs:
   # ============================================================
   summary:
     runs-on: ubuntu-latest
-    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, android-ndk]
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk]
     if: always()
     steps:
       - uses: actions/checkout@v5
@@ -306,6 +356,15 @@ jobs:
             echo "| macOS (Apple Silicon arm64) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| macOS (Apple Silicon arm64) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # iOS Simulator
+          if [ -f results/result-ios-simulator/result.txt ]; then
+            passed=$(grep -oP '\d+ passed' results/result-ios-simulator/result.txt || echo "?")
+            failed=$(grep -oP '\d+ failed' results/result-ios-simulator/result.txt || echo "?")
+            echo "| iOS (Simulator arm64) | Xcode Clang | ✅ | ✅ ${passed}, ${failed} | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| iOS (Simulator arm64) | Xcode Clang | — | — | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android NDK

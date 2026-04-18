@@ -88,8 +88,12 @@ $NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang++ 
 - ✅ Windows（MSVC 最新版）
 - ✅ Ubuntu（Clang 14 / 16 / 18）
 - ✅ Ubuntu GCC（反向验证——预期编译失败）
-- ✅ macOS（Apple Clang 最新版）
-- ✅ Android NDK r27c（ARM64 / ARM32 / x86_64 交叉编译）
+- ✅ macOS arm64 原生（Apple Clang）
+- ✅ macOS x86_64 交叉编译 + Rosetta 2 运行（Apple Clang）
+- ✅ iOS Simulator arm64（Xcode Clang + xcrun simctl）
+- ✅ Android NDK r27c（ARM64 / ARM32 / x86_64 交叉编译 + x86_64 模拟器运行）
+
+> **关于 macOS x86_64 测试**：GitHub Actions 的 `macos-13` (Intel) runner 已进入淘汰期，排队极慢甚至无法分配。因此我们在 `macos-14` (Apple Silicon arm64) runner 上使用 `-target x86_64-apple-macos13` 交叉编译 x86_64 二进制，再通过 Rosetta 2 翻译运行。这与原生 Intel 硬件上的行为完全等价——编译器生成的机器码相同，Rosetta 2 是指令级翻译，不影响测试逻辑。
 
 ## 许可证
 

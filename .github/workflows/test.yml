@@ -296,74 +296,43 @@ jobs:
           name: result-android-x86_64-emu
           path: result.txt
 
-  # --- Linux ARM 交叉编译 + QEMU user-mode 运行 ---
-  # Android NDK 静态二进制用的是 Bionic libc，在 QEMU user-mode 下 TLS 对齐不满足。
-  # 改用 Linux ARM cross-compiler (glibc) + qemu-user-static 验证 ARM 架构运行时行为。
-  # __declspec(property) 的行为完全由编译器决定（Clang -fms-extensions），
-  # 与 libc 选择（Bionic vs glibc）无关，因此 Linux ARM 测试等效于 Android ARM。
-  linux-arm-qemu:
+  # --- Android ARM64 模拟器运行 (Linux + TCG 软件模拟) ---
+  # NDK Bionic 静态二进制在 QEMU user-mode 下有 TLS 对齐问题，
+  # 必须通过完整 Android 模拟器运行。Linux runner 无 ARM KVM，
+  # 但可以用 TCG 软件模拟跑 ARM64 模拟器（速度慢但测试集小）。
+  android-run-arm64:
     runs-on: ubuntu-latest
+    needs: android-ndk-compile
     steps:
-      - uses: actions/checkout@v5
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: android-binaries
 
-      - name: Install cross-compilers and QEMU
+      - name: Enable KVM group perms
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            g++-aarch64-linux-gnu \
-            g++-arm-linux-gnueabihf \
-            qemu-user-static binfmt-support
-          qemu-aarch64-static --version | head -1
-          qemu-arm-static --version | head -1
-          aarch64-linux-gnu-g++ --version | head -1
-          arm-linux-gnueabihf-g++ --version | head -1
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
-      - name: Cross-compile ARM64 (Clang + glibc)
-        run: |
-          # 优先用 clang --target 交叉编译（保持 Clang + -fms-extensions 一致性）
-          # 链接 glibc 运行时
-          clang++ --target=aarch64-linux-gnu \
-            --sysroot=/usr/aarch64-linux-gnu \
-            -I/usr/aarch64-linux-gnu/include/c++/13/aarch64-linux-gnu \
-            -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
-            -o test_arm64 declspec_property_test.cpp \
-            -L/usr/aarch64-linux-gnu/lib \
-            || \
-          aarch64-linux-gnu-g++ -std=c++17 -Wall -Wextra -static \
-            -o test_arm64 declspec_property_test.cpp
-          file test_arm64
-
-      - name: Cross-compile ARM32 (Clang + glibc)
-        run: |
-          clang++ --target=arm-linux-gnueabihf \
-            --sysroot=/usr/arm-linux-gnueabihf \
-            -I/usr/arm-linux-gnueabihf/include/c++/13/arm-linux-gnueabihf \
-            -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
-            -o test_arm32 declspec_property_test.cpp \
-            -L/usr/arm-linux-gnueabihf/lib \
-            || \
-          arm-linux-gnueabihf-g++ -std=c++17 -Wall -Wextra -static \
-            -o test_arm32 declspec_property_test.cpp
-          file test_arm32
-
-      - name: Run ARM64 via QEMU user-mode
-        run: |
-          echo "=== ARM64 (Clang + glibc + qemu-aarch64-static) ===" | tee result.txt
-          chmod +x test_arm64
-          qemu-aarch64-static ./test_arm64 | tee -a result.txt
-          echo "" >> result.txt
-
-      - name: Run ARM32 via QEMU user-mode
-        run: |
-          echo "=== ARM32 (Clang + glibc + qemu-arm-static) ===" | tee -a result.txt
-          chmod +x test_arm32
-          qemu-arm-static ./test_arm32 | tee -a result.txt
+      - name: Run on Android Emulator (ARM64 via TCG, API 30)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: arm64-v8a
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel off
+          emulator-boot-timeout: 900
+          script: |
+            adb wait-for-device
+            adb push test_arm64 /data/local/tmp/test_arm64
+            adb shell chmod +x /data/local/tmp/test_arm64
+            adb shell /data/local/tmp/test_arm64 | tee result.txt
 
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-linux-arm-qemu
+          name: result-android-arm64-emu
           path: result.txt
 
   # ============================================================
@@ -371,7 +340,7 @@ jobs:
   # ============================================================
   summary:
     runs-on: ubuntu-latest
-    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-run-x86_64, linux-arm-qemu]
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-run-x86_64, android-run-arm64]
     if: always()
     steps:
       - uses: actions/checkout@v5
@@ -452,22 +421,16 @@ jobs:
             echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # ARM64 + ARM32 QEMU (Linux glibc)
-          if [ -f results/result-linux-arm-qemu/result.txt ]; then
-            arm64_line=$(grep "Results:" results/result-linux-arm-qemu/result.txt | head -1)
-            arm32_line=$(grep "Results:" results/result-linux-arm-qemu/result.txt | tail -1)
-
-            arm64_p=$(echo "$arm64_line" | grep -o '[0-9]* passed')
-            arm64_f=$(echo "$arm64_line" | grep -o '[0-9]* failed')
-            arm32_p=$(echo "$arm32_line" | grep -o '[0-9]* passed')
-            arm32_f=$(echo "$arm32_line" | grep -o '[0-9]* failed')
-
-            echo "| Android ARM64 ¹ | ubuntu + QEMU user-mode | Clang (glibc) | ✅ | ✅ ${arm64_p:-? passed}, ${arm64_f:-? failed} | ${{ needs.linux-arm-qemu.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-            echo "| Android ARM32 ¹ | ubuntu + QEMU user-mode | Clang (glibc) | ✅ | ✅ ${arm32_p:-? passed}, ${arm32_f:-? failed} | ${{ needs.linux-arm-qemu.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          # Android ARM64 模拟器
+          if [ -f results/result-android-arm64-emu/result.txt ]; then
+            res=$(extract_results results/result-android-arm64-emu/result.txt)
+            echo "| Android ARM64 | ubuntu + ARM64 模拟器 (TCG) | NDK Clang 18 | ✅ | ✅ ${res} | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android ARM64 ¹ | ubuntu + QEMU user-mode | Clang (glibc) | — | — | ${{ needs.linux-arm-qemu.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-            echo "| Android ARM32 ¹ | ubuntu + QEMU user-mode | Clang (glibc) | — | — | ${{ needs.linux-arm-qemu.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | ubuntu + ARM64 模拟器 (TCG) | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
+
+          # Android ARM32 (NDK 交叉编译验证)
+          echo "| Android ARM32 | ubuntu (NDK 交叉编译) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
@@ -480,10 +443,8 @@ jobs:
           echo "| macOS x86_64 | 交叉编译 + Rosetta 2 | GitHub 已淘汰 Intel (macos-13) runner；在 macos-14 (arm64) 上用 \`-target x86_64-apple-macos13\` 交叉编译，通过 Rosetta 2 指令翻译运行，与原生 Intel 行为等价 |" >> $GITHUB_STEP_SUMMARY
           echo "| iOS arm64 | Xcode + iPhone Simulator | 在 macos-14 上通过 \`xcrun simctl spawn\` 在 iPhone Simulator 中运行，等同真机 CPU 执行（非指令翻译） |" >> $GITHUB_STEP_SUMMARY
           echo "| Android x86_64 | KVM 硬件加速模拟器 | 在 ubuntu runner 上通过 Android Emulator (API 30) + KVM 硬件虚拟化运行，接近原生性能 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Android ARM64 | QEMU user-mode | 在 ubuntu x86_64 上用 Clang 交叉编译 ARM64 二进制（glibc 静态链接），通过 \`qemu-aarch64-static\` 指令级翻译执行。NDK Bionic 静态二进制存在 TLS 对齐问题无法直接 QEMU 运行，改用 glibc。\`__declspec(property)\` 行为完全由编译器决定（Clang -fms-extensions），与 libc 选择无关 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Android ARM32 | QEMU user-mode | 同上，使用 \`qemu-arm-static\` 执行 ARM32 二进制 |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> ¹ ARM 行标注"Android"是因为验证目标是 Android ARM 架构的编译器行为。NDK 交叉编译已在 \`android-ndk-compile\` job 中通过（ARM64/ARM32/x86_64 均编译零错误）。QEMU 运行使用 glibc 替代 Bionic 仅影响 libc，不影响 \`__declspec(property)\` 的编译器语义验证。" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM64 | TCG 软件模拟器 | 在 ubuntu x86_64 上通过 Android Emulator (API 30, arm64-v8a) 以 TCG 纯软件模拟方式运行 NDK 编译的 Bionic 二进制。无 KVM 加速，但测试集仅 25 case，几秒即可完成 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM32 | NDK 交叉编译 | 编译验证通过（零错误零警告），但无 ARM32 Android 模拟器可用于运行。ARM32 与 ARM64 共享相同的 Clang \`-fms-extensions\` 编译器前端，运行时行为等价 |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "> **为什么 QEMU user-mode 可以验证正确性？** \`__declspec(property)\` 是纯编译期语法糖，编译器将属性访问重写为函数调用，生成的机器码与手写 Getter/Setter 等价。QEMU user-mode 提供精确的 CPU 指令翻译，足以验证编译器生成代码的逻辑正确性。" >> $GITHUB_STEP_SUMMARY
 

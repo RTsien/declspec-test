@@ -1,0 +1,148 @@
+name: __declspec(property) Cross-Platform Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # ============================================================
+  # Windows — MSVC (native support, no extra flags)
+  # ============================================================
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Show compiler version
+        run: cl 2>&1 | head -2
+        shell: bash
+
+      - name: Compile
+        run: cl /EHsc /std:c++17 /W4 /WX /Fe:test.exe declspec_property_test.cpp
+        shell: cmd
+
+      - name: Run tests
+        run: test.exe
+        shell: cmd
+
+  # ============================================================
+  # Ubuntu — Clang (with -fms-extensions)
+  # ============================================================
+  linux-clang:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        clang-version: [14, 16, 18]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang ${{ matrix.clang-version }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-${{ matrix.clang-version }}
+
+      - name: Show compiler version
+        run: clang++-${{ matrix.clang-version }} --version
+
+      - name: Compile (with -fms-extensions)
+        run: |
+          clang++-${{ matrix.clang-version }} -std=c++17 -Wall -Wextra -Werror \
+            -fms-extensions \
+            -o test declspec_property_test.cpp
+
+      - name: Run tests
+        run: ./test
+
+      - name: Compile (without -fms-extensions, expect FAIL)
+        run: |
+          if clang++-${{ matrix.clang-version }} -std=c++17 -Wall -Wextra \
+            -o test_noms declspec_property_test.cpp 2>/dev/null; then
+            echo "ERROR: Should have failed without -fms-extensions!"
+            exit 1
+          else
+            echo "PASS: Correctly failed without -fms-extensions"
+          fi
+
+  # ============================================================
+  # Ubuntu — GCC (expect compile FAILURE)
+  # ============================================================
+  linux-gcc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show GCC version
+        run: g++ --version
+
+      - name: Compile (expect FAIL — GCC does not support __declspec(property))
+        run: |
+          if g++ -std=c++17 -Wall -Wextra -o test declspec_property_test.cpp 2>/dev/null; then
+            echo "UNEXPECTED: GCC compiled successfully?!"
+            ./test
+          else
+            echo "PASS: GCC correctly does not support __declspec(property)"
+          fi
+
+  # ============================================================
+  # macOS — Apple Clang
+  # ============================================================
+  macos-clang:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show compiler version
+        run: clang++ --version
+
+      - name: Compile (with -fms-extensions)
+        run: |
+          clang++ -std=c++17 -Wall -Wextra -Werror \
+            -fms-extensions \
+            -o test declspec_property_test.cpp
+
+      - name: Run tests
+        run: ./test
+
+  # ============================================================
+  # Android NDK — Cross-compile only (no device to run on)
+  # ============================================================
+  android-ndk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+
+      - name: Cross-compile ARM64
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -o test_arm64 declspec_property_test.cpp
+          file test_arm64
+
+      - name: Cross-compile ARM32
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang++ \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -o test_arm32 declspec_property_test.cpp
+          file test_arm32
+
+      - name: Cross-compile x86_64 (emulator)
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang++ \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -o test_x86_64 declspec_property_test.cpp
+          file test_x86_64
+
+      - name: Show NDK Clang version
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --version

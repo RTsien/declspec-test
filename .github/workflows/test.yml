@@ -358,11 +358,17 @@ jobs:
           echo "| 目标平台 | 宿主机 | 编译器 | 编译 | 运行 | 结果 |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|--------|--------|------|------|------|" >> $GITHUB_STEP_SUMMARY
 
+          extract_results() {
+            local file="$1"
+            passed=$(grep -o '[0-9]* passed' "$file" | head -1)
+            failed=$(grep -o '[0-9]* failed' "$file" | head -1)
+            echo "${passed:-? passed}, ${failed:-? failed}"
+          }
+
           # Windows MSVC
           if [ -f results/result-windows-msvc/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-windows-msvc/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-windows-msvc/result.txt || echo "?")
-            echo "| Windows x86_64 | windows-latest | MSVC | ✅ | ✅ $passed, $failed | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            res=$(extract_results results/result-windows-msvc/result.txt)
+            echo "| Windows x86_64 | windows-latest | MSVC | ✅ | ✅ $res | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Windows x86_64 | windows-latest | MSVC | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
@@ -370,9 +376,8 @@ jobs:
           # Linux Clang versions
           for ver in 14 16 18; do
             if [ -f "results/result-linux-clang-${ver}/result.txt" ]; then
-              passed=$(grep -oP '\d+ passed' "results/result-linux-clang-${ver}/result.txt" || echo "?")
-              failed=$(grep -oP '\d+ failed' "results/result-linux-clang-${ver}/result.txt" || echo "?")
-              echo "| Linux x86_64 | ubuntu-latest | Clang ${ver} | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+              res=$(extract_results "results/result-linux-clang-${ver}/result.txt")
+              echo "| Linux x86_64 | ubuntu-latest | Clang ${ver} | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
             else
               echo "| Linux x86_64 | ubuntu-latest | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
             fi
@@ -380,7 +385,6 @@ jobs:
 
           # Linux GCC
           if [ -f results/result-linux-gcc/result.txt ]; then
-            gcc_result=$(cat results/result-linux-gcc/result.txt)
             echo "| Linux x86_64 | ubuntu-latest | GCC | ❌ 预期失败 | — | ✅ 符合预期 |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Linux x86_64 | ubuntu-latest | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
@@ -388,53 +392,48 @@ jobs:
 
           # macOS ARM64
           if [ -f results/result-macos-arm64/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-macos-arm64/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-macos-arm64/result.txt || echo "?")
-            echo "| macOS arm64 | macos-14 (Apple Silicon) | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            res=$(extract_results results/result-macos-arm64/result.txt)
+            echo "| macOS arm64 | macos-14 (Apple Silicon) | Apple Clang | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| macOS arm64 | macos-14 (Apple Silicon) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # macOS x86_64 via Rosetta
           if [ -f results/result-macos-x86_64/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-macos-x86_64/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-macos-x86_64/result.txt || echo "?")
-            echo "| macOS x86_64 | macos-14 + Rosetta 2 | Apple Clang | ✅ | ✅ ${passed}, ${failed} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            res=$(extract_results results/result-macos-x86_64/result.txt)
+            echo "| macOS x86_64 | macos-14 + Rosetta 2 | Apple Clang | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| macOS x86_64 | macos-14 + Rosetta 2 | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # iOS Simulator
           if [ -f results/result-ios-simulator/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-ios-simulator/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-ios-simulator/result.txt || echo "?")
-            echo "| iOS arm64 | macos-14 + Simulator | Xcode Clang | ✅ | ✅ ${passed}, ${failed} | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            res=$(extract_results results/result-ios-simulator/result.txt)
+            echo "| iOS arm64 | macos-14 + Simulator | Xcode Clang | ✅ | ✅ ${res} | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| iOS arm64 | macos-14 + Simulator | Xcode Clang | — | — | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android x86_64 模拟器
           if [ -f results/result-android-x86_64-emu/result.txt ]; then
-            passed=$(grep -oP '\d+ passed' results/result-android-x86_64-emu/result.txt || echo "?")
-            failed=$(grep -oP '\d+ failed' results/result-android-x86_64-emu/result.txt || echo "?")
-            echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | ✅ ${passed}, ${failed} | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            res=$(extract_results results/result-android-x86_64-emu/result.txt)
+            echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | ✅ ${res} | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android ARM64 + ARM32 QEMU
           if [ -f results/result-android-arm-qemu/result.txt ]; then
-            # 提取两个 "Results:" 行（ARM64 是第一个，ARM32 是第二个）
             arm64_line=$(grep "Results:" results/result-android-arm-qemu/result.txt | head -1)
             arm32_line=$(grep "Results:" results/result-android-arm-qemu/result.txt | tail -1)
 
-            arm64_passed=$(echo "$arm64_line" | grep -o '[0-9]* passed')
-            arm64_failed=$(echo "$arm64_line" | grep -o '[0-9]* failed')
-            arm32_passed=$(echo "$arm32_line" | grep -o '[0-9]* passed')
-            arm32_failed=$(echo "$arm32_line" | grep -o '[0-9]* failed')
+            arm64_p=$(echo "$arm64_line" | grep -o '[0-9]* passed')
+            arm64_f=$(echo "$arm64_line" | grep -o '[0-9]* failed')
+            arm32_p=$(echo "$arm32_line" | grep -o '[0-9]* passed')
+            arm32_f=$(echo "$arm32_line" | grep -o '[0-9]* failed')
 
-            echo "| Android ARM64 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm64_passed:-?}, ${arm64_failed:-?} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-            echo "| Android ARM32 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm32_passed:-?}, ${arm32_failed:-?} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm64_p:-? passed}, ${arm64_f:-? failed} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM32 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | ✅ ${arm32_p:-? passed}, ${arm32_f:-? failed} | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Android ARM64 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
             echo "| Android ARM32 | ubuntu + QEMU user-mode | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
@@ -466,7 +465,6 @@ jobs:
             name=$(basename "$dir" | sed 's/result-//')
             echo "### 📦 ${name}" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat "${dir}/result.txt" 2>/dev/null || echo "(no output)"
             cat "${dir}/result.txt" >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "(no output)" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY

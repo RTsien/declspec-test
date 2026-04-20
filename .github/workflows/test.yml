@@ -307,7 +307,7 @@ jobs:
       - name: Cross-compile x86_64 (NDK r21e)
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android21-clang++ \
-            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
             -o test_x86_64 declspec_property_test.cpp
           file test_x86_64
 

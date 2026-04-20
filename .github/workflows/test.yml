@@ -435,7 +435,7 @@ jobs:
           echo "# 🧪 __declspec(property) 跨平台测试报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| 目标平台 | 宿主机 | 编译器 | 编译 | 运行 | 结果 |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|--------|------|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "|:---------|:-------|:-------|:----:|:----:|:----:|" >> $GITHUB_STEP_SUMMARY
 
           extract_results() {
             local file="$1"
@@ -444,88 +444,105 @@ jobs:
             echo "${passed:-? passed}, ${failed:-? failed}"
           }
 
+          # 从 result.txt 中提取编译器版本 (格式: "Compiler: xxx")
+          extract_compiler() {
+            local file="$1"
+            local fallback="$2"
+            if [ -f "$file" ]; then
+              ver=$(grep -o 'Compiler: .*' "$file" | head -1 | sed 's/Compiler: //')
+              echo "${ver:-$fallback}"
+            else
+              echo "$fallback"
+            fi
+          }
+
           # Windows MSVC
           if [ -f results/result-windows-msvc/result.txt ]; then
             res=$(extract_results results/result-windows-msvc/result.txt)
-            echo "| Windows x86_64 | windows-2022 | MSVC (VS 2022) | ✅ | ✅ $res | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            comp=$(extract_compiler results/result-windows-msvc/result.txt "MSVC")
+            echo "| Windows x86_64 | \`windows-2022\` | ${comp} | ✅ | ✅ ${res} | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Windows x86_64 | windows-2022 | MSVC (VS 2022) | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Windows x86_64 | \`windows-2022\` | MSVC | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Linux Clang versions
           for ver in 11 13 14 16 18; do
+            if [ "$ver" -le 13 ]; then
+              host="ubuntu-22.04"
+            else
+              host="ubuntu-24.04"
+            fi
             if [ -f "results/result-linux-clang-${ver}/result.txt" ]; then
               res=$(extract_results "results/result-linux-clang-${ver}/result.txt")
-              if [ "$ver" -le 13 ]; then
-                host="ubuntu-22.04"
-              else
-                host="ubuntu-latest"
-              fi
-              echo "| Linux x86_64 | ${host} | Clang ${ver} | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+              comp=$(extract_compiler "results/result-linux-clang-${ver}/result.txt" "Clang ${ver}")
+              echo "| Linux x86_64 | \`${host}\` | ${comp} | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
             else
-              echo "| Linux x86_64 | ubuntu | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+              echo "| Linux x86_64 | \`${host}\` | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
             fi
           done
 
           # Linux GCC
           if [ -f results/result-linux-gcc/result.txt ]; then
-            echo "| Linux x86_64 | ubuntu-latest | GCC | ❌ 预期失败 | — | ✅ 符合预期 |" >> $GITHUB_STEP_SUMMARY
+            echo "| Linux x86_64 | \`ubuntu-24.04\` | GCC 13.3.0 | ❌ 预期失败 | — | ✅ 符合预期 |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Linux x86_64 | ubuntu-latest | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Linux x86_64 | \`ubuntu-24.04\` | GCC | — | — | ${{ needs.linux-gcc.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # macOS ARM64
           if [ -f results/result-macos-arm64/result.txt ]; then
             res=$(extract_results results/result-macos-arm64/result.txt)
-            echo "| macOS arm64 | macos-14 (Apple Silicon) | Apple Clang | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            comp=$(extract_compiler results/result-macos-arm64/result.txt "Apple Clang")
+            echo "| macOS arm64 | \`macos-14\` (Apple Silicon) | Apple ${comp} | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| macOS arm64 | macos-14 (Apple Silicon) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS arm64 | \`macos-14\` (Apple Silicon) | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # macOS x86_64 via Rosetta
           if [ -f results/result-macos-x86_64/result.txt ]; then
             res=$(extract_results results/result-macos-x86_64/result.txt)
-            echo "| macOS x86_64 | macos-14 + Rosetta 2 | Apple Clang | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+            comp=$(extract_compiler results/result-macos-x86_64/result.txt "Apple Clang")
+            echo "| macOS x86_64 | \`macos-14\` + Rosetta 2 | Apple ${comp} | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| macOS x86_64 | macos-14 + Rosetta 2 | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS x86_64 | \`macos-14\` + Rosetta 2 | Apple Clang | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # iOS Simulator
           if [ -f results/result-ios-simulator/result.txt ]; then
             res=$(extract_results results/result-ios-simulator/result.txt)
-            echo "| iOS arm64 | macos-14 + Simulator | Xcode Clang | ✅ | ✅ ${res} | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            comp=$(extract_compiler results/result-ios-simulator/result.txt "Xcode Clang")
+            echo "| iOS arm64 | \`macos-14\` + Simulator | Xcode ${comp} | ✅ | ✅ ${res} | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| iOS arm64 | macos-14 + Simulator | Xcode Clang | — | — | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| iOS arm64 | \`macos-14\` + Simulator | Xcode Clang | — | — | ${{ needs.ios-simulator.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Android x86_64 模拟器
           if [ -f results/result-android-x86_64-emu/result.txt ]; then
             res=$(extract_results results/result-android-x86_64-emu/result.txt)
-            echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | ✅ ${res} | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android x86_64 | \`ubuntu-24.04\` + KVM 模拟器 | NDK r27c / Clang 18.0.3 | ✅ | ✅ ${res} | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android x86_64 | ubuntu + KVM 模拟器 | NDK Clang 18 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android x86_64 | \`ubuntu-24.04\` + KVM 模拟器 | NDK r27c / Clang 18.0.3 | ✅ | — | ${{ needs.android-run-x86_64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Android ARM64 模拟器
+          # Android ARM64 Docker (NDK r27c)
           if [ -f results/result-android-arm64-emu/result.txt ]; then
             res=$(extract_results results/result-android-arm64-emu/result.txt)
-            echo "| Android ARM64 | ubuntu + Docker arm64 (QEMU) | NDK Clang 18 | ✅ | ✅ ${res} | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | \`ubuntu-24.04\` + Docker arm64 | NDK r27c / Clang 18.0.3 | ✅ | ✅ ${res} | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android ARM64 | ubuntu + Docker arm64 (QEMU) | NDK Clang 18 | ✅ | — | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | \`ubuntu-24.04\` + Docker arm64 | NDK r27c / Clang 18.0.3 | ✅ | — | ${{ needs.android-run-arm64.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Android ARM32 (NDK 交叉编译验证)
-          echo "| Android ARM32 | ubuntu (NDK 交叉编译) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          # Android ARM32 (NDK r27c 交叉编译)
+          echo "| Android ARM32 | \`ubuntu-24.04\` (交叉编译) | NDK r27c / Clang 18.0.3 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           # Android NDK r21e (Clang 9) — 最低版本
-          echo "| Android ARM64 | ubuntu-22.04 | NDK r21e (Clang 9) | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM64 | \`ubuntu-22.04\` (交叉编译) | NDK r21e / Clang 9.0.9 | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           if [ -f results/result-android-arm64-r21e/result.txt ]; then
             res=$(extract_results results/result-android-arm64-r21e/result.txt)
-            echo "| Android ARM64 | ubuntu + Docker arm64 | NDK r21e (Clang 9) | ✅ | ✅ ${res} | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | \`ubuntu-24.04\` + Docker arm64 | NDK r21e / Clang 9.0.9 | ✅ | ✅ ${res} | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android ARM64 | ubuntu + Docker arm64 | NDK r21e (Clang 9) | ✅ | — | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android ARM64 | \`ubuntu-24.04\` + Docker arm64 | NDK r21e / Clang 9.0.9 | ✅ | — | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "| Android ARM32 | ubuntu-22.04 | NDK r21e (Clang 9) | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM32 | \`ubuntu-22.04\` (交叉编译) | NDK r21e / Clang 9.0.9 | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

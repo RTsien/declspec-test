@@ -14,7 +14,16 @@ jobs:
   # Windows — MSVC (native support, no extra flags)
   # ============================================================
   windows-msvc:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-2019
+            label: "VS 2019"
+            artifact: result-windows-msvc-2019
+          - os: windows-2022
+            label: "VS 2022"
+            artifact: result-windows-msvc-2022
     steps:
       - uses: actions/checkout@v5
 
@@ -44,7 +53,7 @@ jobs:
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: result-windows-msvc
+          name: ${{ matrix.artifact }}
           path: result.txt
 
   # ============================================================
@@ -409,12 +418,14 @@ jobs:
           }
 
           # Windows MSVC
-          if [ -f results/result-windows-msvc/result.txt ]; then
-            res=$(extract_results results/result-windows-msvc/result.txt)
-            echo "| Windows x86_64 | windows-latest | MSVC | ✅ | ✅ $res | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Windows x86_64 | windows-latest | MSVC | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-          fi
+          for msvc in "2019" "2022"; do
+            if [ -f "results/result-windows-msvc-${msvc}/result.txt" ]; then
+              res=$(extract_results "results/result-windows-msvc-${msvc}/result.txt")
+              echo "| Windows x86_64 | windows-${msvc} | MSVC (VS ${msvc}) | ✅ | ✅ ${res} | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Windows x86_64 | windows-${msvc} | MSVC (VS ${msvc}) | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
 
           # Linux Clang versions
           for ver in 11 13 14 16 18; do

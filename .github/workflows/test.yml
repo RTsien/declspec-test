@@ -449,7 +449,7 @@ jobs:
             local file="$1"
             local fallback="$2"
             if [ -f "$file" ]; then
-              ver=$(grep -o 'Compiler: .*' "$file" | head -1 | sed 's/Compiler: //')
+              ver=$(grep -o 'Compiler: .*' "$file" | head -1 | sed 's/Compiler: //' | tr -d '\r')
               echo "${ver:-$fallback}"
             else
               echo "$fallback"
@@ -535,7 +535,6 @@ jobs:
           echo "| Android ARM32 | \`ubuntu-24.04\` (交叉编译) | NDK r27c / Clang 18.0.3 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           # Android NDK r21e (Clang 9) — 最低版本
-          echo "| Android ARM64 | \`ubuntu-22.04\` (交叉编译) | NDK r21e / Clang 9.0.9 | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           if [ -f results/result-android-arm64-r21e/result.txt ]; then
             res=$(extract_results results/result-android-arm64-r21e/result.txt)
             echo "| Android ARM64 | \`ubuntu-24.04\` + Docker arm64 | NDK r21e / Clang 9.0.9 | ✅ | ✅ ${res} | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY

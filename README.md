@@ -99,7 +99,6 @@ $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
 
 | 目标平台 | 宿主机 | 编译器 | 验证方式 |
 |----------|--------|--------|---------|
-| Windows x86_64 | windows-2019 | **MSVC (VS 2019)** | 原生编译+运行 |
 | Windows x86_64 | windows-2022 | MSVC (VS 2022) | 原生编译+运行 |
 | Linux x86_64 | ubuntu-22.04 | **Clang 11** | 原生编译+运行 |
 | Linux x86_64 | ubuntu-22.04 | **Clang 13** | 原生编译+运行 |

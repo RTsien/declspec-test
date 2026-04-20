@@ -100,8 +100,6 @@ $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
 | 目标平台 | 宿主机 | 编译器 | 验证方式 |
 |----------|--------|--------|---------|
 | Windows x86_64 | windows-2022 | MSVC (VS 2022) | 原生编译+运行 |
-
-> **Windows 低版本说明**：`windows-2019` (VS 2019) runner 已进入淘汰期（排队无法分配，与 `macos-13` 相同情况）。`__declspec(property)` 是 MSVC 从 VS 6.0 (1998) 起的原生特性，不存在版本兼容性风险。
 | Linux x86_64 | ubuntu-22.04 | **Clang 11** | 原生编译+运行 |
 | Linux x86_64 | ubuntu-22.04 | **Clang 13** | 原生编译+运行 |
 | Linux x86_64 | ubuntu-latest | Clang 14 | 原生编译+运行 |

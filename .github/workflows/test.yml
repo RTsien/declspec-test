@@ -317,6 +317,12 @@ jobs:
           name: android-binary-r21e-arm64
           path: test_arm64
 
+      - name: Upload x86_64 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-binary-r21e-x86_64
+          path: test_x86_64
+
   # --- Android ARM64 运行 NDK r21e 二进制 (Docker + QEMU) ---
   android-run-arm64-r21e:
     runs-on: ubuntu-latest
@@ -345,6 +351,40 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: result-android-arm64-r21e
+          path: result.txt
+
+  # --- Android x86_64 运行 NDK r21e 二进制 (KVM 模拟器) ---
+  android-run-x86_64-r21e:
+    runs-on: ubuntu-latest
+    needs: android-ndk-r21e
+    steps:
+      - name: Download x86_64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: android-binary-r21e-x86_64
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run x86_64 binary on Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
+          script: |
+            adb push test_x86_64 /data/local/tmp/test
+            adb shell chmod +x /data/local/tmp/test
+            adb shell /data/local/tmp/test | tee result.txt
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-android-x86_64-r21e
           path: result.txt
 
   # --- Android x86_64 模拟器运行 (Linux KVM 加速) ---
@@ -420,7 +460,7 @@ jobs:
   # ============================================================
   summary:
     runs-on: ubuntu-latest
-    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-ndk-r21e, android-run-x86_64, android-run-arm64, android-run-arm64-r21e]
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-ndk-r21e, android-run-x86_64, android-run-arm64, android-run-arm64-r21e, android-run-x86_64-r21e]
     if: always()
     steps:
       - uses: actions/checkout@v5
@@ -542,7 +582,12 @@ jobs:
             echo "| Android ARM64 | \`ubuntu-24.04\` + Docker arm64 | NDK r21e / Clang 9.0.9 | ✅ | — | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
           echo "| Android ARM32 | \`ubuntu-22.04\` (交叉编译) | NDK r21e / Clang 9.0.9 | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Android x86_64 | \`ubuntu-22.04\` (交叉编译) | NDK r21e / Clang 9.0.9 | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          if [ -f results/result-android-x86_64-r21e/result.txt ]; then
+            res=$(extract_results results/result-android-x86_64-r21e/result.txt)
+            echo "| Android x86_64 | \`ubuntu-24.04\` + KVM 模拟器 | NDK r21e / Clang 9.0.9 | ✅ | ✅ ${res} | ${{ needs.android-run-x86_64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Android x86_64 | \`ubuntu-24.04\` + KVM 模拟器 | NDK r21e / Clang 9.0.9 | ✅ | — | ${{ needs.android-run-x86_64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

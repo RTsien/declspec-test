@@ -100,14 +100,21 @@ $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
 | 目标平台 | 宿主机 | 编译器 | 验证方式 |
 |----------|--------|--------|---------|
 | Windows x86_64 | windows-latest | MSVC | 原生编译+运行 |
-| Linux x86_64 | ubuntu-latest | Clang 14 / 16 / 18 | 原生编译+运行 |
+| Linux x86_64 | ubuntu-22.04 | **Clang 11** | 原生编译+运行 |
+| Linux x86_64 | ubuntu-22.04 | **Clang 13** | 原生编译+运行 |
+| Linux x86_64 | ubuntu-latest | Clang 14 | 原生编译+运行 |
+| Linux x86_64 | ubuntu-latest | Clang 16 | 原生编译+运行 |
+| Linux x86_64 | ubuntu-latest | Clang 18 | 原生编译+运行 |
 | Linux x86_64 | ubuntu-latest | GCC | 反向验证（预期编译失败） |
 | macOS arm64 | macos-14 | Apple Clang | 原生编译+运行 |
 | macOS x86_64 | macos-14 | Apple Clang | 交叉编译 + Rosetta 2 运行 |
 | iOS arm64 | macos-14 | Xcode Clang | 编译 + iPhone Simulator 运行 |
-| Android x86_64 | ubuntu-latest | NDK Clang 18 | 交叉编译 + KVM 模拟器运行 |
-| Android ARM64 | ubuntu-latest | NDK Clang 18 | 交叉编译 + Docker arm64 容器运行 |
-| Android ARM32 | ubuntu-latest | NDK Clang 18 | 交叉编译验证（仅编译） |
+| Android ARM64/ARM32/x86_64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | 交叉编译验证（仅编译） |
+| Android x86_64 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译 + KVM 模拟器运行 |
+| Android ARM64 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译 + Docker arm64 容器运行 |
+| Android ARM32 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译验证（仅编译） |
+
+> **版本覆盖说明**：Clang 11 (2020) 和 NDK r21e (Clang 9, 2020) 是 CI 中能稳定测试的最低版本，接近 README 中声明的最低支持版本（Clang 3.3 / NDK r10）。GitHub Actions 无法直接获取更早版本的 Clang/NDK 二进制，但 `__declspec(property)` 的编译器前端支持自 Clang 3.3 起未有过不兼容变更。
 
 #### 特殊验证方式说明
 

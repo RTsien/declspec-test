@@ -51,10 +51,22 @@ jobs:
   # Ubuntu — Clang (with -fms-extensions)
   # ============================================================
   linux-clang:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        clang-version: [14, 16, 18]
+        include:
+          # 低版本 Clang 在 ubuntu-22.04 上可用
+          - os: ubuntu-22.04
+            clang-version: 11
+          - os: ubuntu-22.04
+            clang-version: 13
+          # 当前版本在 ubuntu-latest (24.04)
+          - os: ubuntu-latest
+            clang-version: 14
+          - os: ubuntu-latest
+            clang-version: 16
+          - os: ubuntu-latest
+            clang-version: 18
     steps:
       - uses: actions/checkout@v5
 
@@ -222,7 +234,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Android NDK
+      - name: Setup Android NDK r27c (Clang 18)
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
@@ -261,6 +273,43 @@ jobs:
             test_arm64
             test_arm32
             test_x86_64
+
+  # --- Android NDK r21e (Clang 9) — 最低版本编译验证 ---
+  android-ndk-r21e:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Android NDK r21e (Clang 9)
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r21e
+
+      - name: Show NDK Clang version
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --version
+
+      - name: Cross-compile ARM64 (NDK r21e)
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -o test_arm64 declspec_property_test.cpp
+          file test_arm64
+
+      - name: Cross-compile ARM32 (NDK r21e)
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang++ \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -o test_arm32 declspec_property_test.cpp
+          file test_arm32
+
+      - name: Cross-compile x86_64 (NDK r21e)
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android21-clang++ \
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
+            -o test_x86_64 declspec_property_test.cpp
+          file test_x86_64
 
   # --- Android x86_64 模拟器运行 (Linux KVM 加速) ---
   android-run-x86_64:
@@ -335,7 +384,7 @@ jobs:
   # ============================================================
   summary:
     runs-on: ubuntu-latest
-    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-run-x86_64, android-run-arm64]
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-ndk-r21e, android-run-x86_64, android-run-arm64]
     if: always()
     steps:
       - uses: actions/checkout@v5
@@ -368,12 +417,17 @@ jobs:
           fi
 
           # Linux Clang versions
-          for ver in 14 16 18; do
+          for ver in 11 13 14 16 18; do
             if [ -f "results/result-linux-clang-${ver}/result.txt" ]; then
               res=$(extract_results "results/result-linux-clang-${ver}/result.txt")
-              echo "| Linux x86_64 | ubuntu-latest | Clang ${ver} | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+              if [ "$ver" -le 13 ]; then
+                host="ubuntu-22.04"
+              else
+                host="ubuntu-latest"
+              fi
+              echo "| Linux x86_64 | ${host} | Clang ${ver} | ✅ | ✅ ${res} | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
             else
-              echo "| Linux x86_64 | ubuntu-latest | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
+              echo "| Linux x86_64 | ubuntu | Clang ${ver} | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
             fi
           done
 
@@ -426,6 +480,10 @@ jobs:
 
           # Android ARM32 (NDK 交叉编译验证)
           echo "| Android ARM32 | ubuntu (NDK 交叉编译) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+
+          # Android NDK r21e (Clang 9) — 最低版本编译验证
+          echo "| Android ARM64 | ubuntu-22.04 | NDK r21e (Clang 9) | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android ARM32 | ubuntu-22.04 | NDK r21e (Clang 9) | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

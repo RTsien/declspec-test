@@ -109,7 +109,8 @@ $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
 | macOS arm64 | macos-14 | Apple Clang | 原生编译+运行 |
 | macOS x86_64 | macos-14 | Apple Clang | 交叉编译 + Rosetta 2 运行 |
 | iOS arm64 | macos-14 | Xcode Clang | 编译 + iPhone Simulator 运行 |
-| Android ARM64/ARM32/x86_64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | 交叉编译 + ARM64 Docker QEMU 运行 |
+| Android ARM64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | 交叉编译 + Docker arm64 容器运行 |
+| Android ARM32/x86_64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | 交叉编译验证（仅编译） |
 | Android x86_64 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译 + KVM 模拟器运行 |
 | Android ARM64 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译 + Docker arm64 容器运行 |
 | Android ARM32 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译验证（仅编译） |

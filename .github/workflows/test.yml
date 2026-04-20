@@ -542,6 +542,7 @@ jobs:
             echo "| Android ARM64 | \`ubuntu-24.04\` + Docker arm64 | NDK r21e / Clang 9.0.9 | ✅ | — | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
           fi
           echo "| Android ARM32 | \`ubuntu-22.04\` (交叉编译) | NDK r21e / Clang 9.0.9 | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android x86_64 | \`ubuntu-22.04\` (交叉编译) | NDK r21e / Clang 9.0.9 | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

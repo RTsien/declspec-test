@@ -100,6 +100,8 @@ $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
 | 目标平台 | 宿主机 | 编译器 | 验证方式 |
 |----------|--------|--------|---------|
 | Windows x86_64 | windows-2022 | MSVC (VS 2022) | 原生编译+运行 |
+
+> **Windows 低版本说明**：`windows-2019` (VS 2019) runner 已进入淘汰期（排队无法分配，与 `macos-13` 相同情况）。`__declspec(property)` 是 MSVC 从 VS 6.0 (1998) 起的原生特性，不存在版本兼容性风险。
 | Linux x86_64 | ubuntu-22.04 | **Clang 11** | 原生编译+运行 |
 | Linux x86_64 | ubuntu-22.04 | **Clang 13** | 原生编译+运行 |
 | Linux x86_64 | ubuntu-latest | Clang 14 | 原生编译+运行 |
@@ -114,7 +116,7 @@ $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
 | Android ARM64 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译 + Docker arm64 容器运行 |
 | Android ARM32 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译验证（仅编译） |
 
-> **版本覆盖说明**：Clang 11 (2020) 和 NDK r21e (Clang 9, 2020) 是 CI 中能稳定测试的最低版本，接近 README 中声明的最低支持版本（Clang 3.3 / NDK r10）。GitHub Actions 无法直接获取更早版本的 Clang/NDK 二进制，但 `__declspec(property)` 的编译器前端支持自 Clang 3.3 起未有过不兼容变更。
+> **版本覆盖说明**：Clang 11 (2020) 和 NDK r21e (Clang 9, 2020) 是 CI 中能稳定测试的最低版本，接近 README 中声明的最低支持版本（Clang 3.3 / NDK r10）。GitHub Actions 已淘汰 `macos-13` (Intel) 和 `windows-2019` (VS 2019) runner，无法直接获取更早版本的编译器二进制，但 `__declspec(property)` 的编译器前端支持自 Clang 3.3 / MSVC VS 6.0 起未有过不兼容变更。
 
 #### 特殊验证方式说明
 

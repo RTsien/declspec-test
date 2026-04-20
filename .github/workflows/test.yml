@@ -542,6 +542,8 @@ jobs:
           echo "| Android ARM32 | NDK 交叉编译 | 编译验证通过（零错误零警告），但无 ARM32 Android 模拟器可用于运行。ARM32 与 ARM64 共享相同的 Clang \`-fms-extensions\` 编译器前端，运行时行为等价 |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "> **为什么 QEMU user-mode 可以验证正确性？** \`__declspec(property)\` 是纯编译期语法糖，编译器将属性访问重写为函数调用，生成的机器码与手写 Getter/Setter 等价。QEMU user-mode 提供精确的 CPU 指令翻译，足以验证编译器生成代码的逻辑正确性。" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **关于低版本 Runner 淘汰**：GitHub Actions 已淘汰 \`windows-2019\` (VS 2019) 和 \`macos-13\` (Intel) runner（排队永不分配）。\`__declspec(property)\` 是 MSVC 自 VS 6.0 (1998) 起的原生特性，不存在版本兼容性风险；macOS Intel 行为通过 Rosetta 2 等价验证。" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY

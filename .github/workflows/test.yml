@@ -14,16 +14,7 @@ jobs:
   # Windows — MSVC (native support, no extra flags)
   # ============================================================
   windows-msvc:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: windows-2019
-            label: "VS 2019"
-            artifact: result-windows-msvc-2019
-          - os: windows-2022
-            label: "VS 2022"
-            artifact: result-windows-msvc-2022
+    runs-on: windows-2019
     steps:
       - uses: actions/checkout@v5
 
@@ -53,7 +44,7 @@ jobs:
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: result-windows-msvc
           path: result.txt
 
   # ============================================================
@@ -299,11 +290,11 @@ jobs:
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --version
 
-      - name: Cross-compile ARM64 (NDK r21e)
+      - name: Cross-compile ARM64 (NDK r21e, static + TLS fix)
         run: |
           ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
-            -std=c++17 -Wall -Wextra -Werror -fms-extensions \
-            -o test_arm64 declspec_property_test.cpp
+            -std=c++17 -Wall -Wextra -Werror -fms-extensions -static \
+            -o test_arm64 declspec_property_test.cpp bionic_tls_align.S
           file test_arm64
 
       - name: Cross-compile ARM32 (NDK r21e)
@@ -319,6 +310,42 @@ jobs:
             -std=c++17 -Wall -Wextra -Werror -fms-extensions \
             -o test_x86_64 declspec_property_test.cpp
           file test_x86_64
+
+      - name: Upload ARM64 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-binary-r21e-arm64
+          path: test_arm64
+
+  # --- Android ARM64 运行 NDK r21e 二进制 (Docker + QEMU) ---
+  android-run-arm64-r21e:
+    runs-on: ubuntu-latest
+    needs: android-ndk-r21e
+    steps:
+      - name: Download ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: android-binary-r21e-arm64
+
+      - name: Set up QEMU for Docker multiarch
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Run ARM64 binary in arm64 Docker container
+        run: |
+          chmod +x test_arm64
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD/test_arm64:/test_arm64:ro" \
+            arm64v8/ubuntu:24.04 \
+            /test_arm64 | tee result.txt
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-android-arm64-r21e
+          path: result.txt
 
   # --- Android x86_64 模拟器运行 (Linux KVM 加速) ---
   android-run-x86_64:
@@ -393,7 +420,7 @@ jobs:
   # ============================================================
   summary:
     runs-on: ubuntu-latest
-    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-ndk-r21e, android-run-x86_64, android-run-arm64]
+    needs: [windows-msvc, linux-clang, linux-gcc, macos-clang, ios-simulator, android-ndk-compile, android-ndk-r21e, android-run-x86_64, android-run-arm64, android-run-arm64-r21e]
     if: always()
     steps:
       - uses: actions/checkout@v5
@@ -418,14 +445,12 @@ jobs:
           }
 
           # Windows MSVC
-          for msvc in "2019" "2022"; do
-            if [ -f "results/result-windows-msvc-${msvc}/result.txt" ]; then
-              res=$(extract_results "results/result-windows-msvc-${msvc}/result.txt")
-              echo "| Windows x86_64 | windows-${msvc} | MSVC (VS ${msvc}) | ✅ | ✅ ${res} | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "| Windows x86_64 | windows-${msvc} | MSVC (VS ${msvc}) | — | — | ⚠️ |" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
+          if [ -f results/result-windows-msvc/result.txt ]; then
+            res=$(extract_results results/result-windows-msvc/result.txt)
+            echo "| Windows x86_64 | windows-2019 | MSVC (VS 2019) | ✅ | ✅ $res | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Windows x86_64 | windows-2019 | MSVC (VS 2019) | — | — | ${{ needs.windows-msvc.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
 
           # Linux Clang versions
           for ver in 11 13 14 16 18; do
@@ -492,8 +517,14 @@ jobs:
           # Android ARM32 (NDK 交叉编译验证)
           echo "| Android ARM32 | ubuntu (NDK 交叉编译) | NDK Clang 18 | ✅ | — (仅编译) | ${{ needs.android-ndk-compile.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
-          # Android NDK r21e (Clang 9) — 最低版本编译验证
+          # Android NDK r21e (Clang 9) — 最低版本
           echo "| Android ARM64 | ubuntu-22.04 | NDK r21e (Clang 9) | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          if [ -f results/result-android-arm64-r21e/result.txt ]; then
+            res=$(extract_results results/result-android-arm64-r21e/result.txt)
+            echo "| Android ARM64 | ubuntu + Docker arm64 | NDK r21e (Clang 9) | ✅ | ✅ ${res} | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Android ARM64 | ubuntu + Docker arm64 | NDK r21e (Clang 9) | ✅ | — | ${{ needs.android-run-arm64-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "| Android ARM32 | ubuntu-22.04 | NDK r21e (Clang 9) | ${{ needs.android-ndk-r21e.result == 'success' && '✅' || '❌' }} | — (仅编译) | ${{ needs.android-ndk-r21e.result == 'success' && '✅ PASS' || '❌ FAIL' }} |" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY

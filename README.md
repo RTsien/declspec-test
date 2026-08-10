@@ -1,155 +1,170 @@
-# `__declspec(property)` 跨平台编译兼容性测试套件
+# `__declspec(property)` Cross-Platform Compiler Compatibility Test Suite
+
+English | [简体中文](README.zh-CN.md)
 
 [![CI](https://github.com/RTsien/declspec-test/actions/workflows/test.yml/badge.svg)](https://github.com/RTsien/declspec-test/actions/workflows/test.yml)
 
-> 📊 **最新测试报告**：[查看 GitHub Actions Summary](https://github.com/RTsien/declspec-test/actions/runs/24657048908)
+> 📊 **Latest test report:** [View the GitHub Actions summary](https://github.com/RTsien/declspec-test/actions/runs/24657048908)
 
-本仓库包含一套完整的测试用例，用于验证 `__declspec(property)` 在 **Windows (MSVC)**、**macOS (Apple Clang)**、**Linux (Clang)**、**Android (NDK Clang)** 下的编译和运行行为。
+This repository provides a comprehensive test suite for the compile-time and runtime behavior of `__declspec(property)` on **Windows (MSVC)**, **macOS (Apple Clang)**, **Linux (Clang)**, and **Android (NDK Clang)**.
 
-## 背景
+## Background
 
-`__declspec(property)` 是微软 C++ 扩展，用于创建"虚拟数据成员"——编译器会将 `obj.Prop` 自动重写为 `obj.GetProp()` / `obj.SetProp()` 调用，实现类似 C# 的属性语法。
+`__declspec(property)` is a Microsoft C++ extension for creating "virtual data members." The compiler rewrites `obj.Prop` as calls to `obj.GetProp()` or `obj.SetProp()`, providing property syntax similar to C#.
 
-**应用场景**：UE（虚幻引擎）项目中的代码生成系统（如 Mirror 同步框架）依赖 `__declspec(property)` 为自动生成的 Getter/Setter/UPROPERTY 提供简洁的语法糖。
+**Use case:** Code-generation systems in Unreal Engine projects, such as the Mirror synchronization framework, use `__declspec(property)` to provide concise syntax for generated getters, setters, and UPROPERTY fields.
 
-## 编译器支持矩阵
+## Compiler support matrix
 
-| 平台 | 编译器 | 最低版本 | 所需编译选项 | 状态 |
-|------|--------|---------|-------------|------|
-| **Windows** | MSVC | VS 6.0 (1998) | 无（原生支持） | ✅ |
+| Platform | Compiler | Minimum version | Required option | Status |
+| --- | --- | --- | --- | --- |
+| **Windows** | MSVC | VS 6.0 (1998) | None (natively supported) | ✅ |
 | **macOS** | Apple Clang | Clang 3.3 / Xcode 5 (2013) | `-fms-extensions` | ✅ |
-| **iOS** | Apple Clang | 同 macOS | `-fms-extensions` | ✅ |
-| **Linux** | Clang | 3.3 (2013) | `-fms-extensions` 或 `-fdeclspec` | ✅ |
+| **iOS** | Apple Clang | Same as macOS | `-fms-extensions` | ✅ |
+| **Linux** | Clang | 3.3 (2013) | `-fms-extensions` or `-fdeclspec` | ✅ |
 | **Android** | NDK Clang | NDK r10 / Clang 3.4 (2014) | `-fms-extensions` | ✅ |
-| **Linux** | GCC | — | — | ❌ 不支持 |
+| **Linux** | GCC | — | — | ❌ Unsupported |
 
-> **注**：UE 构建系统 (UBT) 从 UE 4.20+ 起默认为所有 Clang 目标启用 `-fms-extensions`。
+> **Note:** Unreal Build Tool (UBT) enables `-fms-extensions` by default for all Clang targets starting with UE 4.20.
 
-## 测试用例（共 25 个）
+## Test cases (25 total)
 
-| # | 用例名 | 测试内容 | 风险等级 |
-|---|--------|---------|---------|
-| 1 | `basic_pod_get_set` | POD 类型基本读写 | 🟢 安全 |
-| 2 | `readonly_property` | 只读属性（仅 get，无 put） | 🟢 安全 |
-| 3 | `struct_whole_assign` | 结构体整体赋值是否触发 Setter | 🟢 安全 |
-| 4 | `struct_submember_modify` | ⚠️ 子成员修改是否触发 Setter | 🔴 关键风险 |
-| 5 | `pointer_property` | 指针类型读写 | 🟢 安全 |
-| 6 | `pointer_deref_modify` | 通过属性指针解引用修改目标对象 | 🟡 需注意 |
-| 7 | `inheritance_access` | 子类访问父类属性 | 🟢 安全 |
-| 8 | `virtual_getter_setter` | 虚函数 Getter/Setter 多态调用 | 🟢 安全 |
-| 9 | `auto_decltype_deduction` | `auto` / `decltype` 类型推导 | 🟡 编译器相关 |
-| 10 | `template_usage` | 模板中使用属性 | 🟡 需注意 |
-| 11 | `compound_assignment` | `+=`, `-=`, `*=` 复合赋值 | 🟡 展开为 get+put |
-| 12 | `increment_decrement` | `++` / `--` 前置和后置 | 🟡 需注意 |
-| 13 | `address_of_property` | `&obj.Property` 取地址行为 | 🔴 编译器间有差异 |
-| 14 | `multiple_properties` | 同一个类中多个属性 | 🟢 安全 |
-| 15 | `name_conflict` | 属性名与方法名冲突 | 🟡 需注意 |
-| 16 | `ternary_operator` | 三元运算符 `?:` 交互 | 🟢 安全 |
-| 17 | `lambda_capture` | Lambda 值捕获 / 引用捕获 | 🟢 安全 |
-| 18 | `sizeof_property` | `sizeof(obj.Property)` 是否触发 Getter | 🟢 安全 |
-| 19 | `function_argument` | 属性作为函数参数（值传递 / const引用 / 非const引用） | 🔴 编译器间有差异 |
-| 20 | `enum_property` | 枚举类型 + switch | 🟢 安全 |
-| 21 | `bool_property` | bool 属性与 if / 逻辑运算 | 🟢 安全 |
-| 22 | `int64_with_hook` | int64 带变更回调 + 相同值跳过 | 🟢 安全 |
-| 23 | `cast_interaction` | `static_cast` / `reinterpret_cast` 交互 | 🟢 安全 |
-| 24 | `initializer_context` | 初始化列表中使用属性 `{obj.Val, ...}` | 🟢 安全 |
-| 25 | `loop_condition` | 循环条件中使用属性 | 🟢 安全 |
+| # | Test name | Coverage | Risk level |
+| --- | --- | --- | --- |
+| 1 | `basic_pod_get_set` | Basic POD reads and writes | 🟢 Safe |
+| 2 | `readonly_property` | Read-only property (`get` without `put`) | 🟢 Safe |
+| 3 | `struct_whole_assign` | Whether whole-struct assignment invokes the setter | 🟢 Safe |
+| 4 | `struct_submember_modify` | Whether modifying a submember invokes the setter | 🔴 Critical risk |
+| 5 | `pointer_property` | Pointer reads and writes | 🟢 Safe |
+| 6 | `pointer_deref_modify` | Modifying a target through a property pointer | 🟡 Use caution |
+| 7 | `inheritance_access` | Accessing a base-class property from a subclass | 🟢 Safe |
+| 8 | `virtual_getter_setter` | Polymorphic calls to virtual getters and setters | 🟢 Safe |
+| 9 | `auto_decltype_deduction` | `auto` / `decltype` type deduction | 🟡 Compiler-dependent |
+| 10 | `template_usage` | Properties in templates | 🟡 Use caution |
+| 11 | `compound_assignment` | Compound assignment with `+=`, `-=`, and `*=` | 🟡 Expands to get + put |
+| 12 | `increment_decrement` | Prefix and postfix `++` / `--` | 🟡 Use caution |
+| 13 | `address_of_property` | Address-of behavior for `&obj.Property` | 🔴 Differs by compiler |
+| 14 | `multiple_properties` | Multiple properties in one class | 🟢 Safe |
+| 15 | `name_conflict` | Conflicts between property and method names | 🟡 Use caution |
+| 16 | `ternary_operator` | Interaction with the ternary operator `?:` | 🟢 Safe |
+| 17 | `lambda_capture` | Lambda capture by value and by reference | 🟢 Safe |
+| 18 | `sizeof_property` | Whether `sizeof(obj.Property)` invokes the getter | 🟢 Safe |
+| 19 | `function_argument` | Passing a property by value, const reference, or non-const reference | 🔴 Differs by compiler |
+| 20 | `enum_property` | Enum properties and `switch` | 🟢 Safe |
+| 21 | `bool_property` | Boolean properties with `if` and logical operators | 🟢 Safe |
+| 22 | `int64_with_hook` | `int64` with a change callback and unchanged-value skipping | 🟢 Safe |
+| 23 | `cast_interaction` | Interaction with `static_cast` and `reinterpret_cast` | 🟢 Safe |
+| 24 | `initializer_context` | Properties in initializer lists such as `{obj.Val, ...}` | 🟢 Safe |
+| 25 | `loop_condition` | Properties in loop conditions | 🟢 Safe |
 
-## 核心结论
+## Key findings
 
-### ✅ 全平台安全
-- 基本 get/put、继承、虚函数派发、模板、复合赋值、`++/--`、Lambda 捕获、`sizeof`、类型转换——全部正常。
+### ✅ Safe across all tested platforms
 
-### ⚠️ 已知风险（语义层面，非编译器 bug）
-1. **子成员修改绕过 Setter**：`obj.Position.X = 5` **不会**触发 `SetPosition()`。`get` 返回 `const ref` 时，修改子成员要么编译报错（const 保护），要么静默失败。应使用显式的 `AccessXxx()` 方法。
-2. **取地址 `&obj.Property`**：不同编译器行为不一致，属于未定义行为。应使用返回 `T&` 的 `AccessXxx()` 方法替代。
-3. **非 const 引用传参**：将属性传给 `void fn(int&)` 在 MSVC 上可能编译通过，但在 Clang 上会失败。
+Basic get/put operations, inheritance, virtual dispatch, templates, compound assignments, `++` / `--`, lambda captures, `sizeof`, and casts all behave as expected.
 
-### 💡 运行时行为
-`__declspec(property)` 是**纯编译期语法糖**。编译器将属性访问重写为函数调用，生成的机器码与手写 `GetX()` / `SetX()` 完全一致。**无运行时开销、无虚表、无 RTTI、无平台相关行为**。
+### ⚠️ Known semantic risks (not compiler bugs)
 
-## 使用方法
+1. **Submember modification bypasses the setter:** `obj.Position.X = 5` does **not** invoke `SetPosition()`. When `get` returns a const reference, modifying a submember either fails to compile because of const protection or silently fails. Use an explicit `AccessXxx()` method instead.
+2. **Taking the address with `&obj.Property`:** Behavior differs between compilers and is undefined. Use an `AccessXxx()` method that returns `T&` instead.
+3. **Passing by non-const reference:** Passing a property to `void fn(int&)` may compile with MSVC but fail with Clang.
 
-### 本地编译（macOS / Linux + Clang）
+### 💡 Runtime behavior
+
+`__declspec(property)` is **pure compile-time syntax sugar**. The compiler rewrites property access as function calls, producing the same machine code as handwritten `GetX()` / `SetX()` calls. It adds **no runtime overhead, vtable, RTTI, or platform-specific runtime behavior**.
+
+## Usage
+
+### Local build: macOS / Linux with Clang
+
 ```bash
 clang++ -std=c++17 -Wall -Wextra -fms-extensions -o test declspec_property_test.cpp && ./test
 ```
 
-### 本地编译（Windows + MSVC）
+### Local build: Windows with MSVC
+
 ```cmd
 cl /EHsc /std:c++17 /W4 /Fe:test.exe declspec_property_test.cpp && test.exe
 ```
 
-### 本地编译（Android NDK 交叉编译）
+### Android NDK cross-compilation
+
 ```bash
-# ARM64 静态链接（需要 bionic_tls_align.S 修复 TLS 对齐）
+# Statically linked ARM64 build (bionic_tls_align.S fixes TLS alignment)
 $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
   -std=c++17 -fms-extensions -static \
   -o test_arm64 declspec_property_test.cpp bionic_tls_align.S
-# 推送到设备运行: adb push test_arm64 /data/local/tmp/ && adb shell /data/local/tmp/test_arm64
+# Run on a device: adb push test_arm64 /data/local/tmp/ && adb shell /data/local/tmp/test_arm64
 
-# 动态链接（无需 TLS 修复）
+# Dynamically linked build (no TLS fix required)
 $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang++ \
   -std=c++17 -fms-extensions \
   -o test_arm64 declspec_property_test.cpp
 ```
 
-### CI 自动化（GitHub Actions）
-推送到本仓库后，GitHub Actions 自动在以下环境并行编译和运行：
+### GitHub Actions CI
 
-| 目标平台 | 宿主机 | 编译器 | 验证方式 |
-|----------|--------|--------|---------|
-| Windows x86_64 | windows-2022 | MSVC (VS 2022) | 原生编译+运行 |
-| Linux x86_64 | ubuntu-22.04 | **Clang 11** | 原生编译+运行 |
-| Linux x86_64 | ubuntu-22.04 | **Clang 13** | 原生编译+运行 |
-| Linux x86_64 | ubuntu-latest | Clang 14 | 原生编译+运行 |
-| Linux x86_64 | ubuntu-latest | Clang 16 | 原生编译+运行 |
-| Linux x86_64 | ubuntu-latest | Clang 18 | 原生编译+运行 |
-| Linux x86_64 | ubuntu-latest | GCC | 反向验证（预期编译失败） |
-| macOS arm64 | macos-14 | Apple Clang | 原生编译+运行 |
-| macOS x86_64 | macos-14 | Apple Clang | 交叉编译 + Rosetta 2 运行 |
-| iOS arm64 | macos-14 | Xcode Clang | 编译 + iPhone Simulator 运行 |
-| Android ARM64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | 交叉编译 + Docker arm64 容器运行 |
-| Android x86_64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | 交叉编译 + KVM 模拟器运行 |
-| Android ARM32 | ubuntu-22.04 | **NDK r21e (Clang 9)** | 交叉编译验证（仅编译） |
-| Android x86_64 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译 + KVM 模拟器运行 |
-| Android ARM64 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译 + Docker arm64 容器运行 |
-| Android ARM32 | ubuntu-latest | NDK r27c (Clang 18) | 交叉编译验证（仅编译） |
+Every push triggers parallel builds and tests in the following environments:
 
-> **版本覆盖说明**：Clang 11 (2020) 和 NDK r21e (Clang 9, 2020) 是 CI 中能稳定测试的最低版本，接近 README 中声明的最低支持版本（Clang 3.3 / NDK r10）。GitHub Actions 已淘汰 `macos-13` (Intel) 和 `windows-2019` (VS 2019) runner，无法直接获取更早版本的编译器二进制，但 `__declspec(property)` 的编译器前端支持自 Clang 3.3 / MSVC VS 6.0 起未有过不兼容变更。
+| Target platform | Runner | Compiler | Verification |
+| --- | --- | --- | --- |
+| Windows x86_64 | windows-2022 | MSVC (VS 2022) | Native build and run |
+| Linux x86_64 | ubuntu-22.04 | **Clang 11** | Native build and run |
+| Linux x86_64 | ubuntu-22.04 | **Clang 13** | Native build and run |
+| Linux x86_64 | ubuntu-latest | Clang 14 | Native build and run |
+| Linux x86_64 | ubuntu-latest | Clang 16 | Native build and run |
+| Linux x86_64 | ubuntu-latest | Clang 18 | Native build and run |
+| Linux x86_64 | ubuntu-latest | GCC | Negative test (expected compilation failure) |
+| macOS arm64 | macos-14 | Apple Clang | Native build and run |
+| macOS x86_64 | macos-14 | Apple Clang | Cross-build and run with Rosetta 2 |
+| iOS arm64 | macos-14 | Xcode Clang | Build and run in iPhone Simulator |
+| Android ARM64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | Cross-build and run in an ARM64 Docker container |
+| Android x86_64 | ubuntu-22.04 | **NDK r21e (Clang 9)** | Cross-build and run in a KVM emulator |
+| Android ARM32 | ubuntu-22.04 | **NDK r21e (Clang 9)** | Cross-build only |
+| Android x86_64 | ubuntu-latest | NDK r27c (Clang 18) | Cross-build and run in a KVM emulator |
+| Android ARM64 | ubuntu-latest | NDK r27c (Clang 18) | Cross-build and run in an ARM64 Docker container |
+| Android ARM32 | ubuntu-latest | NDK r27c (Clang 18) | Cross-build only |
 
-#### 特殊验证方式说明
+> **Version coverage:** Clang 11 (2020) and NDK r21e (Clang 9, 2020) are the oldest versions that can be tested reliably in CI and are close to the minimum supported versions documented above (Clang 3.3 / NDK r10). GitHub Actions no longer offers the `macos-13` (Intel) and `windows-2019` (VS 2019) runners, so earlier compiler binaries are not directly available. However, the `__declspec(property)` compiler frontend support introduced in Clang 3.3 and MSVC VS 6.0 has had no known incompatible changes.
+
+#### Special verification methods
 
 **macOS x86_64 — Rosetta 2**
-GitHub Actions 的 `macos-13` (Intel) runner 已进入淘汰期，排队极慢甚至无法分配。因此在 `macos-14` (Apple Silicon) 上使用 `-target x86_64-apple-macos13` 交叉编译，再通过 Rosetta 2 指令级翻译运行，与原生 Intel 行为完全等价。
+
+Because the `macos-13` Intel runner has been retired and is extremely slow or impossible to allocate, the test cross-compiles on `macos-14` (Apple Silicon) with `-target x86_64-apple-macos13`, then runs through Rosetta 2 instruction translation. This is behaviorally equivalent to running natively on Intel.
 
 **iOS arm64 — iPhone Simulator**
-使用 `xcrun --sdk iphonesimulator clang++` 编译，通过 `xcrun simctl spawn` 在 iPhone Simulator 中运行。Simulator 在 Apple Silicon 上原生执行 ARM64 代码（非指令翻译），等同真机 CPU 行为。
 
-**Android x86_64 — KVM 模拟器**
-在 ubuntu runner 上通过 Android Emulator (API 30) + KVM 硬件虚拟化运行，接近原生性能。
+The test builds with `xcrun --sdk iphonesimulator clang++` and runs through `xcrun simctl spawn` in iPhone Simulator. On Apple Silicon, the simulator executes ARM64 code natively rather than through instruction translation, matching physical-device CPU behavior.
+
+**Android x86_64 — KVM emulator**
+
+The Android Emulator (API 30) runs with KVM hardware virtualization on an Ubuntu runner, providing near-native performance.
 
 **Android ARM64 — Docker multiarch + QEMU binfmt**
-NDK 交叉编译的静态 Bionic 二进制无法直接通过 `qemu-user-static` 运行（Bionic 要求 ARM64 TLS segment 对齐 ≥ 64 字节）。解决方案：
-1. 链接时加入 `bionic_tls_align.S`，通过汇编 `.p2align 6` 强制 `.tdata` section 对齐到 64 字节（C 级 `__attribute__((aligned(64)))` 不会传播到 PT_TLS segment alignment）
-2. 使用 `docker/setup-qemu-action` 注册 binfmt handler，在 `arm64v8/ubuntu` 容器中运行 NDK 编译的原始二进制
 
-**Android ARM32 — 仅编译**
-NDK 交叉编译通过零错误零警告。ARM32 与 ARM64 共享相同的 Clang `-fms-extensions` 编译器前端，`__declspec(property)` 语义一致。
+A statically linked Bionic binary cross-compiled with the NDK cannot run directly through `qemu-user-static`, because Bionic requires the ARM64 TLS segment alignment to be at least 64 bytes. The test works around this by:
 
-### Bionic TLS 对齐修复
+1. Linking `bionic_tls_align.S`, whose assembly `.p2align 6` directive forces the `.tdata` section to 64-byte alignment. A C-level `__attribute__((aligned(64)))` does not propagate to the PT_TLS segment alignment.
+2. Registering a binfmt handler with `docker/setup-qemu-action` and running the original NDK-compiled binary in an `arm64v8/ubuntu` container.
 
-Android NDK 静态链接会包含 Bionic `libc.a` 的 TLS 数据，但链接器默认只生成 8 字节对齐的 PT_TLS segment。Bionic 的 `__libc_init` 启动时检查此对齐值，ARM64 要求 ≥ 64、ARM32 要求 ≥ 32，不满足直接 abort。
+**Android ARM32 — build only**
 
-本仓库提供 `bionic_tls_align.S` 作为通用修复：
+The NDK cross-compilation completes without errors or warnings. ARM32 and ARM64 use the same Clang `-fms-extensions` frontend, so their `__declspec(property)` semantics are identical.
+
+### Bionic TLS alignment fix
+
+Static Android NDK linking includes TLS data from Bionic's `libc.a`, but the linker produces a PT_TLS segment aligned to only 8 bytes by default. Bionic's `__libc_init` validates this alignment at startup: ARM64 requires at least 64 bytes and ARM32 requires at least 32 bytes. The process aborts if the requirement is not met.
+
+This repository provides `bionic_tls_align.S` as a general-purpose fix:
 
 ```bash
-# 链接时加入此文件即可
+# Add this file to the link command
 aarch64-linux-android26-clang++ -static -o test test.cpp bionic_tls_align.S
 ```
 
-注意：Clang 的 `__thread __attribute__((aligned(64)))` **不会**影响 PT_TLS segment 的 `p_align` 字段——TLS segment 对齐仅由 `.tdata` section 的 section alignment 决定，只能通过汇编 `.p2align` 指令控制。
+Note that Clang's `__thread __attribute__((aligned(64)))` does **not** affect the PT_TLS segment's `p_align` field. TLS segment alignment is determined only by the `.tdata` section alignment and can only be controlled with an assembly `.p2align` directive.
 
-## 许可证
+## License
 
 MIT
